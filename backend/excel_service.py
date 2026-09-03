@@ -18,70 +18,72 @@ def clean_gstin(val) -> str:
     return val_str
 
 def parse_and_clean_excel(file_bytes: bytes, filename: str, selected_column: str = None):
+    valid_items = {} # gstin -> list of "sheet_name:row_num"
+    invalid_items = []
+    total_rows = 0
+    available_sheets = []
+
     if filename.endswith('.csv'):
         df = pd.read_csv(io.BytesIO(file_bytes))
+        sheets_dict = {'Sheet1': df}
+        available_sheets = ['Sheet1']
     else:
-        df = pd.read_excel(io.BytesIO(file_bytes))
+        xls = pd.ExcelFile(io.BytesIO(file_bytes))
+        available_sheets = xls.sheet_names
+        sheets_dict = {sheet: pd.read_excel(xls, sheet_name=sheet) for sheet in available_sheets}
 
-    total_rows = len(df)
+    for sheet_name, df in sheets_dict.items():
+        total_rows += len(df)
 
-    # 1. Identify GST Column intelligently
-    gst_col = selected_column
-    if not gst_col or gst_col not in df.columns:
-        # Check column names first
-        for col in df.columns:
-            col_str = str(col).lower()
-            if 'gst' in col_str or 'number' in col_str or 'pin' in col_str or 'code' in col_str:
-                gst_col = col
-                break
-
-        # If not found by name, inspect actual data in columns
-        if not gst_col:
-            best_col = None
-            max_matches = -1
+        # Detect GST column for this sheet
+        gst_col = selected_column
+        if not gst_col or gst_col not in df.columns:
             for col in df.columns:
-                matches = 0
-                for v in df[col].dropna():
-                    c = clean_gstin(v)
-                    if GST_REGEX.match(c):
-                        matches += 1
-                if matches > max_matches:
-                    max_matches = matches
-                    best_col = col
-            gst_col = best_col if (best_col and max_matches > 0) else df.columns[0]
+                col_str = str(col).lower()
+                if 'gst' in col_str or 'number' in col_str or 'pin' in col_str or 'code' in col_str:
+                    gst_col = col
+                    break
+            
+            if not gst_col:
+                best_col = None
+                max_matches = -1
+                for col in df.columns:
+                    matches = sum(1 for v in df[col].dropna() if GST_REGEX.match(clean_gstin(v)))
+                    if matches > max_matches:
+                        max_matches = matches
+                        best_col = col
+                gst_col = best_col if (best_col and max_matches > 0) else df.columns[0]
 
-    # 2. Process & Clean Each Row
-    valid_items = {}
-    invalid_items = []
+        for idx, row in df.iterrows():
+            row_num = idx + 2
+            raw_val = row[gst_col]
+            cleaned = clean_gstin(raw_val)
 
-    for idx, row in df.iterrows():
-        row_num = idx + 2
-        raw_val = row[gst_col]
-        cleaned = clean_gstin(raw_val)
+            if not cleaned:
+                continue
 
-        if not cleaned:
-            continue
-
-        if GST_REGEX.match(cleaned):
-            if cleaned not in valid_items:
-                valid_items[cleaned] = []
-            valid_items[cleaned].append(str(row_num))
-        else:
-            invalid_items.append({
-                'gstin': cleaned if cleaned else str(raw_val),
-                'row_num': str(row_num),
-                'error_type': 'Invalid GSTIN Format',
-                'error_message': 'Does not match 15-character GSTIN pattern'
-            })
+            ref_str = f"{sheet_name}:R{row_num}"
+            if GST_REGEX.match(cleaned):
+                if cleaned not in valid_items:
+                    valid_items[cleaned] = []
+                valid_items[cleaned].append(ref_str)
+            else:
+                invalid_items.append({
+                    'gstin': cleaned if cleaned else str(raw_val),
+                    'sheet_name': sheet_name,
+                    'row_num': str(row_num),
+                    'error_type': 'Invalid GSTIN Format',
+                    'error_message': 'Does not match 15-character GSTIN pattern'
+                })
 
     unique_gst_count = len(valid_items)
-    duplicates_removed = sum(len(rows) - 1 for rows in valid_items.values())
-    valid_gst_count = sum(len(rows) for rows in valid_items.values())
+    duplicates_removed = sum(len(refs) - 1 for refs in valid_items.values())
+    valid_gst_count = sum(len(refs) for refs in valid_items.values())
     invalid_gst_count = len(invalid_items)
 
     return {
-        'gst_column': gst_col,
-        'columns': [str(c) for c in df.columns],
+        'gst_column': 'Auto Detected Across Sheets',
+        'columns': available_sheets,
         'total_rows': total_rows,
         'valid_gst_count': valid_gst_count,
         'invalid_gst_count': invalid_gst_count,
@@ -111,17 +113,31 @@ def generate_3sheet_excel(job_id: str) -> bytes:
                     top=Side(style='thin', color='D9D9D9'),
                     bottom=Side(style='thin', color='D9D9D9'))
 
-    # Sheet 1: GST Details
-    ws1 = wb.create_sheet(title='GST Details')
-    headers1 = ['GST Number', 'Legal Name', 'Trade Name', 'GST Status', 'Business Type']
-    ws1.append(headers1)
-
+    # Group items by sheet name if available
+    sheet_groups = {}
     for item in items:
         if item['status'] == 'Success':
+            ref = item['original_row_numbers'] or 'Sheet1'
+            sheet_name = ref.split(':')[0] if ':' in ref else 'GST Details'
+            if sheet_name not in sheet_groups:
+                sheet_groups[sheet_name] = []
+            sheet_groups[sheet_name].append(item)
+
+    if not sheet_groups:
+        sheet_groups['GST Details'] = []
+
+    # Create a result sheet for each original sheet
+    for sheet_name, group_items in sheet_groups.items():
+        title = sheet_name[:30] # Excel 31 char max limit
+        ws = wb.create_sheet(title=title)
+        headers = ['GST Number', 'Legal Name', 'Trade Name', 'GST Status', 'Business Type']
+        ws.append(headers)
+
+        for item in group_items:
             cursor.execute("SELECT * FROM gst_records WHERE gstin = ?", (item['gstin'],))
             rec = cursor.fetchone()
             if rec:
-                ws1.append([
+                ws.append([
                     rec['gstin'],
                     rec['legal_name'] or 'Not Available',
                     rec['trade_name'] or 'Not Available',
@@ -129,16 +145,18 @@ def generate_3sheet_excel(job_id: str) -> bytes:
                     rec['business_type'] or 'Not Available'
                 ])
             else:
-                ws1.append([item['gstin'], 'Not Available', 'Not Available', 'Not Available', 'Not Available'])
+                ws.append([item['gstin'], 'Not Available', 'Not Available', 'Not Available', 'Not Available'])
 
-    # Sheet 2: Errors
-    ws2 = wb.create_sheet(title='Errors')
-    headers2 = ['GST Number', 'Error Type', 'Error Message', 'Retry Count', 'Status']
-    ws2.append(headers2)
+    # Errors Sheet
+    ws_err = wb.create_sheet(title='Errors')
+    ws_err.append(['Sheet Name', 'GST Number', 'Error Type', 'Error Message', 'Retry Count', 'Status'])
 
     for item in items:
         if item['status'] in ['Failed', 'Invalid']:
-            ws2.append([
+            ref = item['original_row_numbers'] or 'Sheet1'
+            sheet_name = ref.split(':')[0] if ':' in ref else 'Sheet1'
+            ws_err.append([
+                sheet_name,
                 item['gstin'],
                 item['error_type'] or 'Search Error',
                 item['error_message'] or 'GST details unavailable',
@@ -146,22 +164,23 @@ def generate_3sheet_excel(job_id: str) -> bytes:
                 item['status']
             ])
 
-    # Sheet 3: Summary
-    ws3 = wb.create_sheet(title='Summary')
-    ws3.append(['Metric Name', 'Metric Value'])
-    ws3.append(['Filename', job['filename']])
-    ws3.append(['Total Input Rows', job['total_rows']])
-    ws3.append(['Valid GST Numbers', job['valid_gst_count']])
-    ws3.append(['Invalid GST Numbers', job['invalid_gst_count']])
-    ws3.append(['Unique GST Numbers Searched', job['unique_gst_count']])
-    ws3.append(['Duplicates Removed', job['duplicates_removed']])
-    ws3.append(['Successfully Processed', job['success_count']])
-    ws3.append(['Failed / Not Found', job['failed_count']])
-    ws3.append(['Job Status', job['status']])
-    ws3.append(['Created At', str(job['created_at'])])
-    ws3.append(['Completed At', str(job['completed_at']) if job['completed_at'] else 'N/A'])
+    # Summary Sheet
+    ws_sum = wb.create_sheet(title='Summary')
+    ws_sum.append(['Metric Name', 'Metric Value'])
+    ws_sum.append(['Filename', job['filename']])
+    ws_sum.append(['Total Input Rows', job['total_rows']])
+    ws_sum.append(['Valid GST Numbers', job['valid_gst_count']])
+    ws_sum.append(['Invalid GST Numbers', job['invalid_gst_count']])
+    ws_sum.append(['Unique GST Numbers Searched', job['unique_gst_count']])
+    ws_sum.append(['Duplicates Removed', job['duplicates_removed']])
+    ws_sum.append(['Successfully Processed', job['success_count']])
+    ws_sum.append(['Failed / Not Found', job['failed_count']])
+    ws_sum.append(['Job Status', job['status']])
+    ws_sum.append(['Created At', str(job['created_at'])])
+    ws_sum.append(['Completed At', str(job['completed_at']) if job['completed_at'] else 'N/A'])
 
-    for ws in [ws1, ws2, ws3]:
+    # Formatting
+    for ws in wb.worksheets:
         ws.freeze_panes = 'A2'
         ws.auto_filter.ref = ws.dimensions
         for col_num, col_cells in enumerate(ws.iter_cols(min_row=1, max_row=ws.max_row), 1):
