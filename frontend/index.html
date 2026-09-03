@@ -122,6 +122,10 @@
                                 <i class="fa-solid fa-file-arrow-down"></i>
                                 <span>Download 3-Sheet Excel</span>
                             </button>
+                            <button onclick="resetJob()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg font-semibold text-sm flex items-center space-x-1 transition-colors" title="Upload New File">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>New Upload</span>
+                            </button>
                         </div>
                     </div>
 
@@ -162,9 +166,15 @@
     </main>
 
     <script>
-        let currentJobId = null;
+        let currentJobId = localStorage.getItem('currentJobId') || null;
         let selectedFile = null;
         let pollTimer = null;
+
+        window.onload = function() {
+            if (currentJobId) {
+                restoreJob(currentJobId);
+            }
+        };
 
         function switchTab(tab) {
             if (tab === 'batch') {
@@ -201,6 +211,7 @@
                 }
 
                 currentJobId = data.job_id;
+                localStorage.setItem('currentJobId', currentJobId);
 
                 document.getElementById('stat-total').innerText = data.total_rows.toLocaleString();
                 document.getElementById('stat-valid').innerText = data.valid_gst_count.toLocaleString();
@@ -241,6 +252,47 @@
             document.getElementById('column-selector').classList.add('hidden');
         }
 
+        async function restoreJob(jobId) {
+            try {
+                const res = await fetch(`/api/gst/status/${jobId}`);
+                if (!res.ok) {
+                    localStorage.removeItem('currentJobId');
+                    return;
+                }
+                const data = await res.json();
+                document.getElementById('job-dashboard').classList.remove('hidden');
+                document.getElementById('job-filename').innerText = data.filename;
+                pollStatus();
+
+                if (data.status === 'Processing') {
+                    document.getElementById('btn-start').classList.add('hidden');
+                    document.getElementById('btn-pause').classList.remove('hidden');
+                    pollTimer = setInterval(pollStatus, 2000);
+                } else if (data.status === 'Paused') {
+                    document.getElementById('btn-start').classList.remove('hidden');
+                    document.getElementById('btn-start').innerHTML = '<i class="fa-solid fa-play"></i> <span>Resume Processing</span>';
+                    document.getElementById('btn-pause').classList.add('hidden');
+                } else if (data.status === 'Completed') {
+                    document.getElementById('btn-start').classList.add('hidden');
+                    document.getElementById('btn-pause').classList.add('hidden');
+                    document.getElementById('btn-download').classList.remove('hidden');
+                    if (data.failed > 0) {
+                        document.getElementById('btn-retry-failed').classList.remove('hidden');
+                    }
+                }
+            } catch (e) {
+                localStorage.removeItem('currentJobId');
+            }
+        }
+
+        function resetJob() {
+            localStorage.removeItem('currentJobId');
+            currentJobId = null;
+            clearInterval(pollTimer);
+            document.getElementById('job-dashboard').classList.add('hidden');
+            document.getElementById('excel-file').value = '';
+        }
+
         async function startProcessing() {
             if (!currentJobId) return;
             await fetch(`/api/gst/process/${currentJobId}`, { method: 'POST' });
@@ -266,6 +318,7 @@
         async function pollStatus() {
             if (!currentJobId) return;
             const res = await fetch(`/api/gst/status/${currentJobId}`);
+            if (!res.ok) return;
             const data = await res.json();
 
             document.getElementById('progress-bar').style.width = `${data.progress_pct}%`;
