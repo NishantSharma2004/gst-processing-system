@@ -59,17 +59,18 @@ async def upload_excel(file: UploadFile = File(...), selected_column: str = Form
         parsed['invalid_gst_count'], parsed['unique_gst_count'], parsed['duplicates_removed']
     ))
 
-    for gstin, row_nums in parsed['valid_items'].items():
+    for gstin, row_refs in parsed['valid_items'].items():
         cursor.execute('''
             INSERT INTO processing_items (job_id, gstin, original_row_numbers, status)
             VALUES (?, ?, ?, 'Pending')
-        ''', (job_id, gstin, ",".join(row_nums)))
+        ''', (job_id, gstin, ",".join(row_refs)))
 
     for inv in parsed['invalid_items']:
+        ref = f"{inv.get('sheet_name','Sheet1')}:R{inv.get('row_num','?')}"
         cursor.execute('''
             INSERT INTO processing_items (job_id, gstin, original_row_numbers, status, error_type, error_message)
             VALUES (?, ?, ?, 'Invalid', ?, ?)
-        ''', (job_id, inv['gstin'], inv['row_num'], inv['error_type'], inv['error_message']))
+        ''', (job_id, inv['gstin'], ref, inv['error_type'], inv['error_message']))
 
     conn.commit()
     conn.close()
@@ -141,14 +142,27 @@ def get_status(job_id: str):
 def search_company(name: str = Query(..., min_length=2)):
     conn = get_db()
     cursor = conn.cursor()
-    query_str = f"%{name.strip()}%"
+    clean_query = name.strip().upper()
+    pattern = f"%{clean_query}%"
+
     cursor.execute('''
         SELECT gstin, legal_name, trade_name, gst_status, business_type, last_checked_at 
         FROM gst_records 
-        WHERE legal_name LIKE ? OR trade_name LIKE ? OR gstin LIKE ?
+        WHERE UPPER(legal_name) LIKE ? OR UPPER(trade_name) LIKE ? OR UPPER(gstin) LIKE ?
         LIMIT 50
-    ''', (query_str, query_str, query_str))
+    ''', (pattern, pattern, pattern))
     rows = [dict(r) for r in cursor.fetchall()]
+
+    # Fallback to processing_items if no direct match in gst_records
+    if not rows:
+        cursor.execute('''
+            SELECT gstin, 'Processed in Upload' as legal_name, 'Processing Record' as trade_name, status as gst_status, 'GSTIN Record' as business_type, processed_at as last_checked_at
+            FROM processing_items
+            WHERE UPPER(gstin) LIKE ?
+            LIMIT 50
+        ''', (pattern,))
+        rows = [dict(r) for r in cursor.fetchall()]
+
     conn.close()
 
     return {
