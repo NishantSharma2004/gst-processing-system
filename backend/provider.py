@@ -13,13 +13,13 @@ class GSTDataProvider(ABC):
         pass
 
 class ClearTaxGSTProvider(GSTDataProvider):
-    def __init__(self, delay_min: float = 1.5, delay_max: float = 2.5, max_retries: int = 3):
+    def __init__(self, delay_min: float = 2.0, delay_max: float = 3.5, max_retries: int = 4):
         self.delay_min = delay_min
         self.delay_max = delay_max
         self.max_retries = max_retries
         self.user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
         ]
 
@@ -34,7 +34,7 @@ class ClearTaxGSTProvider(GSTDataProvider):
         for attempt in range(1, self.max_retries + 1):
             time.sleep(random.uniform(self.delay_min, self.delay_max))
             try:
-                r = requests.get(url, headers=headers, timeout=12)
+                r = requests.get(url, headers=headers, timeout=15)
                 if r.status_code == 200:
                     data = r.json()
                     info = data.get('taxpayerInfo', {})
@@ -48,21 +48,23 @@ class ClearTaxGSTProvider(GSTDataProvider):
                             'business_type': info.get('ctb', ''),
                             'provider': 'ClearTax'
                         }
-                elif r.status_code == 429:
-                    backoff = 30 * attempt
-                    print(f"Rate limited (429) for {gstin}. Waiting {backoff}s...")
-                    time.sleep(backoff)
+                
+                # Rate limited or blocked (403/429) -> exponential backoff
+                backoff = 10 * attempt
+                print(f"Provider returned status {r.status_code} for {gstin} (Attempt {attempt}). Sleeping {backoff}s...", flush=True)
+                time.sleep(backoff)
+
             except Exception as e:
-                print(f"Error fetching {gstin} (attempt {attempt}): {e}")
-                time.sleep(3 * attempt)
+                backoff = 5 * attempt
+                print(f"Error fetching {gstin} (attempt {attempt}): {e}. Sleeping {backoff}s...", flush=True)
+                time.sleep(backoff)
 
         return {
             'success': False,
             'gstin': gstin,
-            'error_type': 'Not Found / Rate Limited',
-            'error_message': 'GST details unavailable or rate limited by provider'
+            'error_type': 'Rate Limited / Not Found',
+            'error_message': 'GST details temporarily unavailable due to rate limit'
         }
 
     def search_by_company_name(self, company_name: str) -> list:
-        # ClearTax doesn't have an open API for name search, so we query our indexed local database
         return []
