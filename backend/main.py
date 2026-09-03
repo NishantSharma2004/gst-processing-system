@@ -13,7 +13,7 @@ from .database import init_db, get_db, save_gst_record
 from .excel_service import parse_and_clean_excel, generate_3sheet_excel
 from .job_runner import run_processing_job, pause_flags
 
-app = FastAPI(title="GST Processing & Search System")
+app = FastAPI(title="GST Processing System")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,9 +29,13 @@ def startup():
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return FileResponse(os.path.join(frontend_path, "index.html"))
+
+@app.api_route("/healthz", methods=["GET", "HEAD"])
+def health_check():
+    return {"status": "ok"}
 
 @app.post("/api/gst/upload")
 async def upload_excel(file: UploadFile = File(...), selected_column: str = Form(None)):
