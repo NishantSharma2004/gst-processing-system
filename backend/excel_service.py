@@ -25,16 +25,32 @@ def parse_and_clean_excel(file_bytes: bytes, filename: str, selected_column: str
 
     total_rows = len(df)
 
+    # 1. Identify GST Column intelligently
     gst_col = selected_column
     if not gst_col or gst_col not in df.columns:
+        # Check column names first
         for col in df.columns:
             col_str = str(col).lower()
             if 'gst' in col_str or 'number' in col_str or 'pin' in col_str or 'code' in col_str:
                 gst_col = col
                 break
-        if not gst_col and len(df.columns) > 0:
-            gst_col = df.columns[0]
 
+        # If not found by name, inspect actual data in columns
+        if not gst_col:
+            best_col = None
+            max_matches = -1
+            for col in df.columns:
+                matches = 0
+                for v in df[col].dropna():
+                    c = clean_gstin(v)
+                    if GST_REGEX.match(c):
+                        matches += 1
+                if matches > max_matches:
+                    max_matches = matches
+                    best_col = col
+            gst_col = best_col if (best_col and max_matches > 0) else df.columns[0]
+
+    # 2. Process & Clean Each Row
     valid_items = {}
     invalid_items = []
 
