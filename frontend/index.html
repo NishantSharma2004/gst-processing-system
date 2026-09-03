@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GST Processing & Business Search System</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans">
+
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid fa-file-invoice-dollar text-3xl text-sky-400"></i>
+                <div>
+                    <h1 class="text-2xl font-bold tracking-wide">GST Processing System</h1>
+                    <p class="text-xs text-sky-200">Bulk Normalization, Deduplication & Company Search Engine</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2 bg-white/10 px-4 py-2 rounded-full text-xs font-semibold">
+                <span class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></span>
+                <span>System Ready (Free & Open Source)</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        
+        <!-- Navigation Tabs -->
+        <div class="flex border-b border-slate-200 mb-8">
+            <button id="tab-batch-btn" onclick="switchTab('batch')" class="px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none">
+                <i class="fa-solid fa-file-excel"></i>
+                <span>Batch Excel Processing</span>
+            </button>
+            <button id="tab-search-btn" onclick="switchTab('search')" class="px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <span>Instant Company Search</span>
+            </button>
+        </div>
+
+        <!-- TAB 1: BATCH EXCEL PROCESSING -->
+        <div id="tab-batch" class="space-y-6">
+            
+            <!-- Upload Box -->
+            <div id="upload-card" class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center">
+                <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-blue-500 transition-colors cursor-pointer" id="dropzone" onclick="document.getElementById('excel-file').click()">
+                    <i class="fa-solid fa-cloud-arrow-up text-5xl text-blue-500 mb-4"></i>
+                    <h3 class="text-lg font-semibold text-slate-700">Drag & Drop your Excel file here</h3>
+                    <p class="text-sm text-slate-400 mt-1">Supports .xlsx, .xls, and .csv files</p>
+                    <input type="file" id="excel-file" class="hidden" accept=".xlsx, .xls, .csv" onchange="handleFileSelect(event)">
+                </div>
+
+                <!-- Column Selection Modal / Info (Hidden by default) -->
+                <div id="column-selector" class="hidden mt-6 bg-slate-50 p-6 rounded-xl text-left border border-slate-200">
+                    <h4 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-table-columns text-blue-500 mr-2"></i>Select GST Number Column:</h4>
+                    <div class="flex items-center space-x-4">
+                        <select id="col-select-dropdown" class="bg-white border border-slate-300 rounded-lg px-4 py-2 text-sm w-64 focus:ring-2 focus:ring-blue-500">
+                        </select>
+                        <button onclick="confirmUploadWithColumn()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg text-sm transition-colors">
+                            Confirm & Upload
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Job Dashboard (Hidden until upload) -->
+            <div id="job-dashboard" class="hidden space-y-6">
+                
+                <!-- Metrics Summary Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                        <p class="text-xs font-semibold text-slate-400 uppercase">Total Rows</p>
+                        <p id="stat-total" class="text-2xl font-bold text-slate-800 mt-1">0</p>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                        <p class="text-xs font-semibold text-slate-400 uppercase">Valid GSTs</p>
+                        <p id="stat-valid" class="text-2xl font-bold text-emerald-600 mt-1">0</p>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                        <p class="text-xs font-semibold text-slate-400 uppercase">Duplicates Removed</p>
+                        <p id="stat-dedup" class="text-2xl font-bold text-blue-600 mt-1">0</p>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                        <p class="text-xs font-semibold text-slate-400 uppercase">Successful</p>
+                        <p id="stat-success" class="text-2xl font-bold text-teal-600 mt-1">0</p>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                        <p class="text-xs font-semibold text-slate-400 uppercase">Failed / Errors</p>
+                        <p id="stat-failed" class="text-2xl font-bold text-rose-600 mt-1">0</p>
+                    </div>
+                </div>
+
+                <!-- Live Progress Card -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="font-semibold text-slate-800" id="job-filename">filename.xlsx</h3>
+                            <p class="text-xs text-slate-400" id="job-status-badge">Status: Created</p>
+                        </div>
+                        <div class="flex space-x-3">
+                            <button id="btn-start" onclick="startProcessing()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm flex items-center space-x-2 transition-colors">
+                                <i class="fa-solid fa-play"></i>
+                                <span>Start Processing</span>
+                            </button>
+                            <button id="btn-pause" onclick="pauseProcessing()" class="hidden bg-amber-500 hover:bg-amber-600 text-white px-5 py-2 rounded-lg font-semibold text-sm flex items-center space-x-2 transition-colors">
+                                <i class="fa-solid fa-pause"></i>
+                                <span>Pause</span>
+                            </button>
+                            <button id="btn-download" onclick="downloadExcel()" class="hidden bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold text-sm flex items-center space-x-2 transition-colors">
+                                <i class="fa-solid fa-file-arrow-down"></i>
+                                <span>Download 3-Sheet Excel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs font-semibold text-slate-600">
+                            <span id="progress-text">Progress: 0%</span>
+                            <span id="progress-counts">0 / 0 Unique GSTINs</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                            <div id="progress-bar" class="bg-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- TAB 2: INSTANT COMPANY SEARCH -->
+        <div id="tab-search" class="hidden space-y-6">
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <h3 class="font-semibold text-slate-800 text-lg mb-2">Search Companies & GST Records</h3>
+                <p class="text-xs text-slate-400 mb-4">Search instantly by Company Legal Name, Trade Name, or GSTIN (Uses Sub-Millisecond Indexed Search)</p>
+                <div class="flex space-x-3">
+                    <input type="text" id="search-input" placeholder="Enter Legal Name, Trade Name, or GSTIN (e.g. Reliance, ABC Tech)..." class="flex-1 border border-slate-300 rounded-xl px-5 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <button onclick="performSearch()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl text-sm transition-colors flex items-center space-x-2">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <span>Search</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search Results Section -->
+            <div id="search-results" class="space-y-4">
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let currentJobId = null;
+        let selectedFile = null;
+        let pollTimer = null;
+
+        function switchTab(tab) {
+            if (tab === 'batch') {
+                document.getElementById('tab-batch').classList.remove('hidden');
+                document.getElementById('tab-search').classList.add('hidden');
+                document.getElementById('tab-batch-btn').className = "px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none";
+                document.getElementById('tab-search-btn').className = "px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none";
+            } else {
+                document.getElementById('tab-batch').classList.add('hidden');
+                document.getElementById('tab-search').classList.remove('hidden');
+                document.getElementById('tab-search-btn').className = "px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none";
+                document.getElementById('tab-batch-btn').className = "px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none";
+            }
+        }
+
+        async function handleFileSelect(event) {
+            selectedFile = event.target.files[0];
+            if (!selectedFile) return;
+            uploadFile();
+        }
+
+        async function uploadFile(selectedCol = null) {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            if (selectedCol) formData.append('selected_column', selectedCol);
+
+            try {
+                const res = await fetch('/api/gst/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert('Upload Error: ' + (data.detail || 'Failed to upload file'));
+                    return;
+                }
+
+                currentJobId = data.job_id;
+
+                // Show statistics
+                document.getElementById('stat-total').innerText = data.total_rows.toLocaleString();
+                document.getElementById('stat-valid').innerText = data.valid_gst_count.toLocaleString();
+                document.getElementById('stat-dedup').innerText = data.duplicates_removed.toLocaleString();
+                document.getElementById('stat-success').innerText = '0';
+                document.getElementById('stat-failed').innerText = data.invalid_gst_count.toLocaleString();
+
+                document.getElementById('job-filename').innerText = data.filename;
+                document.getElementById('job-status-badge').innerText = 'Status: File Uploaded & Cleaned';
+
+                document.getElementById('job-dashboard').classList.remove('hidden');
+                document.getElementById('btn-start').classList.remove('hidden');
+                document.getElementById('btn-pause').classList.add('hidden');
+                document.getElementById('btn-download').classList.add('hidden');
+
+                // Check if column selection dropdown is needed
+                if (data.available_columns && data.available_columns.length > 1 && !selectedCol) {
+                    const dropdown = document.getElementById('col-select-dropdown');
+                    dropdown.innerHTML = '';
+                    data.available_columns.forEach(col => {
+                        const opt = document.createElement('option');
+                        opt.value = col;
+                        opt.innerText = col;
+                        if (col === data.detected_column) opt.selected = true;
+                        dropdown.appendChild(opt);
+                    });
+                    document.getElementById('column-selector').classList.remove('hidden');
+                }
+
+            } catch (err) {
+                alert('Error uploading file: ' + err);
+            }
+        }
+
+        function confirmUploadWithColumn() {
+            const dropdown = document.getElementById('col-select-dropdown');
+            uploadFile(dropdown.value);
+            document.getElementById('column-selector').classList.add('hidden');
+        }
+
+        async function startProcessing() {
+            if (!currentJobId) return;
+            await fetch(`/api/gst/process/${currentJobId}`, { method: 'POST' });
+            
+            document.getElementById('btn-start').classList.add('hidden');
+            document.getElementById('btn-pause').classList.remove('hidden');
+
+            pollStatus();
+            pollTimer = setInterval(pollStatus, 2000);
+        }
+
+        async function pauseProcessing() {
+            if (!currentJobId) return;
+            await fetch(`/api/gst/pause/${currentJobId}`, { method: 'POST' });
+            clearInterval(pollTimer);
+            document.getElementById('btn-pause').classList.add('hidden');
+            document.getElementById('btn-start').classList.remove('hidden');
+            document.getElementById('btn-start').innerHTML = '<i class="fa-solid fa-play"></i> <span>Resume Processing</span>';
+            document.getElementById('job-status-badge').innerText = 'Status: Paused by User';
+        }
+
+        async function pollStatus() {
+            if (!currentJobId) return;
+            const res = await fetch(`/api/gst/status/${currentJobId}`);
+            const data = await res.json();
+
+            document.getElementById('progress-bar').style.width = `${data.progress_pct}%`;
+            document.getElementById('progress-text').innerText = `Progress: ${data.progress_pct}%`;
+            document.getElementById('progress-counts').innerText = `${data.processed} / ${data.total_unique} Unique GSTINs`;
+            
+            document.getElementById('stat-success').innerText = data.successful.toLocaleString();
+            document.getElementById('stat-failed').innerText = data.failed.toLocaleString();
+            document.getElementById('job-status-badge').innerText = `Status: ${data.status}`;
+
+            if (data.status === 'Completed') {
+                clearInterval(pollTimer);
+                document.getElementById('btn-pause').classList.add('hidden');
+                document.getElementById('btn-start').classList.add('hidden');
+                document.getElementById('btn-download').classList.remove('hidden');
+            }
+        }
+
+        function downloadExcel() {
+            if (!currentJobId) return;
+            window.location.href = `/api/gst/export/${currentJobId}`;
+        }
+
+        async function performSearch() {
+            const query = document.getElementById('search-input').value.trim();
+            if (!query) return;
+
+            const resultsContainer = document.getElementById('search-results');
+            resultsContainer.innerHTML = '<p class="text-sm text-slate-400">Searching...</p>';
+
+            try {
+                const res = await fetch(`/api/gst/company-search?name=${encodeURIComponent(query)}`);
+                const data = await res.json();
+
+                if (data.results.length === 0) {
+                    resultsContainer.innerHTML = '<div class="bg-white p-6 rounded-xl border border-slate-200 text-slate-500 text-sm">No records found matching your query. Try uploading an Excel file first to populate company records!</div>';
+                    return;
+                }
+
+                let html = `<p class="text-xs font-semibold text-slate-500 uppercase mb-3">Found ${data.total_results} matching company record(s)</p>`;
+                data.results.forEach(rec => {
+                    html += `
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors flex justify-between items-center">
+                            <div class="space-y-1">
+                                <div class="flex items-center space-x-3">
+                                    <h4 class="font-bold text-slate-800 text-base">${rec.legal_name || 'N/A'}</h4>
+                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${rec.gst_status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${rec.gst_status || 'N/A'}</span>
+                                </div>
+                                <p class="text-xs text-slate-500">Trade Name: <span class="font-semibold text-slate-700">${rec.trade_name || 'N/A'}</span> | Type: <span class="font-semibold text-slate-700">${rec.business_type || 'N/A'}</span></p>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-mono text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">${rec.gstin}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                resultsContainer.innerHTML = html;
+            } catch (err) {
+                resultsContainer.innerHTML = `<p class="text-sm text-rose-500">Search error: ${err}</p>`;
+            }
+        }
+
+        // Trigger search on Enter key
+        document.getElementById('search-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') performSearch();
+        });
+    </script>
+</body>
+</html>
