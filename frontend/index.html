@@ -54,7 +54,7 @@
                 <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-blue-500 transition-colors cursor-pointer" id="dropzone" onclick="document.getElementById('excel-file').click()">
                     <i class="fa-solid fa-cloud-arrow-up text-5xl text-blue-500 mb-4"></i>
                     <h3 class="text-lg font-semibold text-slate-700">Drag & Drop your Excel file here</h3>
-                    <p class="text-sm text-slate-400 mt-1">Supports .xlsx, .xls, and .csv files</p>
+                    <p class="text-sm text-slate-400 mt-1">Supports .xlsx, .xls, and .csv files (Handles Multi-Sheet Workbooks)</p>
                     <input type="file" id="excel-file" class="hidden" accept=".xlsx, .xls, .csv" onchange="handleFileSelect(event)">
                 </div>
 
@@ -213,11 +213,11 @@
                 currentJobId = data.job_id;
                 localStorage.setItem('currentJobId', currentJobId);
 
-                document.getElementById('stat-total').innerText = data.total_rows.toLocaleString();
-                document.getElementById('stat-valid').innerText = data.valid_gst_count.toLocaleString();
-                document.getElementById('stat-dedup').innerText = data.duplicates_removed.toLocaleString();
+                document.getElementById('stat-total').innerText = (data.total_rows || 0).toLocaleString();
+                document.getElementById('stat-valid').innerText = (data.valid_gst_count || 0).toLocaleString();
+                document.getElementById('stat-dedup').innerText = (data.duplicates_removed || 0).toLocaleString();
                 document.getElementById('stat-success').innerText = '0';
-                document.getElementById('stat-failed').innerText = data.invalid_gst_count.toLocaleString();
+                document.getElementById('stat-failed').innerText = (data.invalid_gst_count || 0).toLocaleString();
 
                 document.getElementById('job-filename').innerText = data.filename;
                 document.getElementById('job-status-badge').innerText = 'Status: File Uploaded & Cleaned';
@@ -228,28 +228,9 @@
                 document.getElementById('btn-download').classList.add('hidden');
                 document.getElementById('btn-retry-failed').classList.add('hidden');
 
-                if (data.available_columns && data.available_columns.length > 1 && !selectedCol) {
-                    const dropdown = document.getElementById('col-select-dropdown');
-                    dropdown.innerHTML = '';
-                    data.available_columns.forEach(col => {
-                        const opt = document.createElement('option');
-                        opt.value = col;
-                        opt.innerText = col;
-                        if (col === data.detected_column) opt.selected = true;
-                        dropdown.appendChild(opt);
-                    });
-                    document.getElementById('column-selector').classList.remove('hidden');
-                }
-
             } catch (err) {
                 alert('Error uploading file: ' + err);
             }
-        }
-
-        function confirmUploadWithColumn() {
-            const dropdown = document.getElementById('col-select-dropdown');
-            uploadFile(dropdown.value);
-            document.getElementById('column-selector').classList.add('hidden');
         }
 
         async function restoreJob(jobId) {
@@ -262,6 +243,13 @@
                 const data = await res.json();
                 document.getElementById('job-dashboard').classList.remove('hidden');
                 document.getElementById('job-filename').innerText = data.filename;
+
+                document.getElementById('stat-total').innerText = (data.total_rows || 0).toLocaleString();
+                document.getElementById('stat-valid').innerText = (data.valid_gst_count || 0).toLocaleString();
+                document.getElementById('stat-dedup').innerText = (data.duplicates_removed || 0).toLocaleString();
+                document.getElementById('stat-success').innerText = (data.successful || 0).toLocaleString();
+                document.getElementById('stat-failed').innerText = (data.failed || 0).toLocaleString();
+
                 pollStatus();
 
                 if (data.status === 'Processing') {
@@ -325,8 +313,11 @@
             document.getElementById('progress-text').innerText = `Progress: ${data.progress_pct}%`;
             document.getElementById('progress-counts').innerText = `${data.processed} / ${data.total_unique} Unique GSTINs`;
             
-            document.getElementById('stat-success').innerText = data.successful.toLocaleString();
-            document.getElementById('stat-failed').innerText = data.failed.toLocaleString();
+            document.getElementById('stat-total').innerText = (data.total_rows || 0).toLocaleString();
+            document.getElementById('stat-valid').innerText = (data.valid_gst_count || 0).toLocaleString();
+            document.getElementById('stat-dedup').innerText = (data.duplicates_removed || 0).toLocaleString();
+            document.getElementById('stat-success').innerText = (data.successful || 0).toLocaleString();
+            document.getElementById('stat-failed').innerText = (data.failed || 0).toLocaleString();
             document.getElementById('job-status-badge').innerText = `Status: ${data.status}`;
 
             if (data.status === 'Completed') {

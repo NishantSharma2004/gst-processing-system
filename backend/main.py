@@ -129,6 +129,10 @@ def get_status(job_id: str):
         'filename': job['filename'],
         'status': job['status'],
         'progress_pct': pct,
+        'total_rows': job['total_rows'],
+        'valid_gst_count': job['valid_gst_count'],
+        'invalid_gst_count': job['invalid_gst_count'],
+        'duplicates_removed': job['duplicates_removed'],
         'total_unique': total,
         'processed': processed,
         'successful': job['success_count'],
@@ -153,10 +157,9 @@ def search_company(name: str = Query(..., min_length=2)):
     ''', (pattern, pattern, pattern))
     rows = [dict(r) for r in cursor.fetchall()]
 
-    # Fallback to processing_items if no direct match in gst_records
     if not rows:
         cursor.execute('''
-            SELECT gstin, 'Processed in Upload' as legal_name, 'Processing Record' as trade_name, status as gst_status, 'GSTIN Record' as business_type, processed_at as last_checked_at
+            SELECT gstin, 'Processed Record' as legal_name, 'Processing Record' as trade_name, status as gst_status, 'GSTIN Record' as business_type, processed_at as last_checked_at
             FROM processing_items
             WHERE UPPER(gstin) LIKE ?
             LIMIT 50
