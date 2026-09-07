@@ -1,23 +1,101 @@
 import sqlite3
 import os
+import re
 from datetime import datetime, timedelta
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
 DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "gst_system.db"))
-db_dir = os.path.dirname(DB_PATH)
-if db_dir and not os.path.exists(db_dir):
-    os.makedirs(db_dir, exist_ok=True)
+
+IS_POSTGRES = False
+if DATABASE_URL and (DATABASE_URL.startswith("postgresql://") or DATABASE_URL.startswith("postgres://")):
+    IS_POSTGRES = True
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+class UnifiedCursor:
+    def __init__(self, conn, is_postgres=False):
+        self.conn = conn
+        self.is_postgres = is_postgres
+        if is_postgres:
+            from psycopg2.extras import RealDictCursor
+            self.cursor = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            self.cursor = conn.cursor()
+
+    def execute(self, sql, params=()):
+        if self.is_postgres:
+            sql = re.sub(r'\?', '%s', sql)
+            sql = sql.replace("AUTOINCREMENT", "")
+            sql = sql.replace("INTEGER PRIMARY KEY", "SERIAL PRIMARY KEY")
+        self.cursor.execute(sql, params)
+        return self
+
+    def executemany(self, sql, params=()):
+        if self.is_postgres:
+            sql = re.sub(r'\?', '%s', sql)
+        self.cursor.executemany(sql, params)
+        return self
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    @property
+    def rowcount(self):
+        return self.cursor.rowcount
+
+    @property
+    def lastrowid(self):
+        if self.is_postgres:
+            try:
+                self.cursor.execute("SELECT lastval()")
+                res = self.cursor.fetchone()
+                return res['lastval'] if res else 1
+            except Exception:
+                return 1
+        return self.cursor.lastrowid
+
+class UnifiedConnection:
+    def __init__(self, conn, is_postgres=False):
+        self.conn = conn
+        self.is_postgres = is_postgres
+
+    def cursor(self):
+        return UnifiedCursor(self.conn, self.is_postgres)
+
+    def commit(self):
+        self.conn.commit()
+
+    def close(self):
+        self.conn.close()
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if IS_POSTGRES:
+        import psycopg2
+        raw_conn = psycopg2.connect(DATABASE_URL)
+        return UnifiedConnection(raw_conn, is_postgres=True)
+    else:
+        db_dir = os.path.dirname(DB_PATH)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+        raw_conn = sqlite3.connect(DB_PATH)
+        raw_conn.row_factory = sqlite3.Row
+        return UnifiedConnection(raw_conn, is_postgres=False)
 
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('PRAGMA page_size = 4096')
-    cursor.execute('PRAGMA journal_mode = WAL')
-    cursor.execute('PRAGMA synchronous = NORMAL')
+
+    if not IS_POSTGRES:
+        cursor.execute('PRAGMA page_size = 4096')
+        cursor.execute('PRAGMA journal_mode = WAL')
+        cursor.execute('PRAGMA synchronous = NORMAL')
 
     # 1. Users table
     cursor.execute('''
@@ -81,24 +159,29 @@ def init_db():
         error_type TEXT,
         error_message TEXT,
         retry_count INTEGER DEFAULT 0,
-        processed_at TIMESTAMP,
-        FOREIGN KEY (job_id) REFERENCES processing_jobs (job_id)
+        processed_at TIMESTAMP
     )
     ''')
 
-    # Check and add user_id column to tables if migrating existing DB
-    for table_name in ['gst_records', 'processing_jobs', 'processing_items']:
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        cols = [r['name'] for r in cursor.fetchall()]
-        if 'user_id' not in cols:
-            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN user_id INTEGER DEFAULT 1")
+    if not IS_POSTGRES:
+        for table_name in ['gst_records', 'processing_jobs', 'processing_items']:
+            try:
+                cursor.execute(f"PRAGMA table_info({table_name})")
+                cols = [r['name'] for r in cursor.fetchall()]
+                if 'user_id' not in cols:
+                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN user_id INTEGER DEFAULT 1")
+            except Exception:
+                pass
 
-    # Indexes after column verification
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_gstin ON gst_records(gstin)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_gstin ON gst_records(user_id, gstin)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_legal_name ON gst_records(legal_name)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_jobs ON processing_jobs(user_id, job_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_job_items ON processing_items(job_id, status)')
+    # Indexes
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_gstin ON gst_records(gstin)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_gstin ON gst_records(user_id, gstin)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_legal_name ON gst_records(legal_name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_jobs ON processing_jobs(user_id, job_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_job_items ON processing_items(job_id, status)')
+    except Exception:
+        pass
 
     # 5. Company Master Records Table (Deep Corporate Data)
     cursor.execute('''
@@ -127,22 +210,18 @@ def init_db():
         activity TEXT,
         charges TEXT,
         directors TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (id)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
-    
-    # Check source_file column migration
-    cursor.execute("PRAGMA table_info(company_master_records)")
-    cols = [r['name'] for r in cursor.fetchall()]
-    if 'source_file' not in cols:
-        cursor.execute("ALTER TABLE company_master_records ADD COLUMN source_file TEXT")
 
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_user ON company_master_records(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_source ON company_master_records(user_id, source_file)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_name ON company_master_records(company_name)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_gstin ON company_master_records(gstin)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_cin ON company_master_records(cin)')
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_user ON company_master_records(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_source ON company_master_records(user_id, source_file)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_name ON company_master_records(company_name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_gstin ON company_master_records(gstin)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_cin ON company_master_records(cin)')
+    except Exception:
+        pass
 
     conn.commit()
     conn.close()
@@ -157,7 +236,7 @@ def get_cached_gst(gstin: str, user_id: int = 1, ttl_days: int = 7):
     ''', (user_id, gstin, cutoff.strftime("%Y-%m-%d %H:%M:%S")))
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    return row
 
 def save_gst_record(gstin: str, legal_name: str, trade_name: str, status: str, business_type: str, provider: str = "ClearTax", user_id: int = 1):
     conn = get_db()
