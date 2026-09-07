@@ -395,9 +395,26 @@ def search_deep_company(request: Request, q: str = Query(..., min_length=2)):
 def search_company(request: Request, name: str = Query(..., min_length=2)):
     return search_deep_company(request, q=name)
 
+def purge_old_gst_jobs():
+    """Auto-purge completed temporary Tab 1 GST processing items to keep database storage 100% clean."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        if getattr(conn, 'is_postgres', False):
+            cursor.execute("DELETE FROM processing_items WHERE created_at < NOW() - INTERVAL '24 hours' OR status = 'Completed'")
+            cursor.execute("DELETE FROM processing_jobs WHERE created_at < NOW() - INTERVAL '24 hours'")
+        else:
+            cursor.execute("DELETE FROM processing_items WHERE job_id IN (SELECT job_id FROM processing_jobs WHERE status = 'Completed')")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print("[AUTO-CLEANUP LOG]", e, flush=True)
+
 @app.get("/api/gst/export/{job_id}")
-def export_excel(job_id: str):
+def export_excel(job_id: str, background_tasks: BackgroundTasks):
     excel_bytes = generate_3sheet_excel(job_id)
+    # Schedule automatic background purge of temporary processing items after user downloads Excel
+    background_tasks.add_task(purge_old_gst_jobs)
     return StreamingResponse(
         io.BytesIO(excel_bytes),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

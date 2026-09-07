@@ -20,6 +20,17 @@ def find_column(df, patterns):
                 return col
     return None
 
+def find_columns_multi(df, patterns):
+    matched = []
+    for col in df.columns:
+        col_clean = str(col).lower().replace("_", " ").replace("-", " ").strip()
+        for p in patterns:
+            if p in col_clean:
+                if col not in matched:
+                    matched.append(col)
+                break
+    return matched
+
 def process_df_chunk(df, filename, user_id, cursor):
     col_name = find_column(df, ['company name', 'legal name', 'company', 'entity name'])
     col_trade = find_column(df, ['trade name', 'brand name', 'trade'])
@@ -35,14 +46,17 @@ def process_df_chunk(df, filename, user_id, cursor):
     col_auth_cap = find_column(df, ['authorized capital', 'auth capital', 'authorized cap'])
     col_paid_cap = find_column(df, ['paid capital', 'paid up capital', 'paidup capital'])
     col_listing = find_column(df, ['listing status', 'listed'])
-    col_email = find_column(df, ['email', 'email id', 'e-mail'])
-    col_address = find_column(df, ['address', 'registered address', 'reg address'])
     col_state = find_column(df, ['state', 'state name'])
     col_district = find_column(df, ['district', 'city'])
     col_pincode = find_column(df, ['pincode', 'pin code', 'zip', 'postal code'])
     col_activity = find_column(df, ['activity', 'business activity', 'industry'])
     col_charges = find_column(df, ['charges', 'mortgages', 'open charges'])
-    col_directors = find_column(df, ['director', 'directors', 'din', 'management'])
+
+    # Multi-column collectors for fields that may appear multiple times (Email 1, Email 2, Phone 1, Phone 2, Director 1, Director 2)
+    cols_email = find_columns_multi(df, ['email', 'e-mail', 'mail'])
+    cols_phone = find_columns_multi(df, ['phone', 'mobile', 'contact', 'cell', 'telephone'])
+    cols_directors = find_columns_multi(df, ['director', 'directors', 'din', 'management', 'partner'])
+    cols_address = find_columns_multi(df, ['address', 'registered address', 'reg address', 'office address', 'location'])
 
     batch = []
     records = df.to_dict('records')
@@ -84,19 +98,54 @@ def process_df_chunk(df, filename, user_id, cursor):
         auth_cap = clean_str(row.get(col_auth_cap)) if col_auth_cap else ""
         paid_cap = clean_str(row.get(col_paid_cap)) if col_paid_cap else ""
         listing = clean_str(row.get(col_listing)) if col_listing else ""
-        email = clean_str(row.get(col_email)) if col_email else ""
-        address = clean_str(row.get(col_address)) if col_address else ""
         state = clean_str(row.get(col_state)) if col_state else ""
         district = clean_str(row.get(col_district)) if col_district else ""
         pincode = clean_str(row.get(col_pincode)) if col_pincode else ""
         activity = clean_str(row.get(col_activity)) if col_activity else ""
         charges = clean_str(row.get(col_charges)) if col_charges else ""
-        directors = clean_str(row.get(col_directors)) if col_directors else ""
+
+        # Collect all email values (Email 1, Email 2)
+        emails = []
+        for c in cols_email:
+            v = clean_str(row.get(c))
+            if v and v not in emails:
+                emails.append(v)
+        email_str = " | ".join(emails)
+
+        # Collect all phone values (Phone 1, Phone 2, Mobile)
+        phones = []
+        for c in cols_phone:
+            v = clean_str(row.get(c))
+            if v and v not in phones:
+                phones.append(v)
+        phone_str = " | ".join(phones)
+
+        if phone_str:
+            if email_str:
+                email_str = f"{email_str} (Phone: {phone_str})"
+            else:
+                email_str = f"Phone: {phone_str}"
+
+        # Collect all address values
+        addresses = []
+        for c in cols_address:
+            v = clean_str(row.get(c))
+            if v and v not in addresses:
+                addresses.append(v)
+        address_str = ", ".join(addresses)
+
+        # Collect all director values (Director 1, Director 2, DIN)
+        directors_list = []
+        for c in cols_directors:
+            v = clean_str(row.get(c))
+            if v and v not in directors_list:
+                directors_list.append(v)
+        directors_str = " | ".join(directors_list)
 
         batch.append((
             user_id, filename, cin, c_name, gstin, inc_date, status, roc, reg_no,
             category, sub_category, class_type, auth_cap, paid_cap, listing,
-            email, address, state, district, pincode, activity, charges, directors
+            email_str, address_str, state, district, pincode, activity, charges, directors_str
         ))
 
     if batch:
