@@ -329,8 +329,8 @@ def delete_master_file(filename: str, request: Request):
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM company_master_records
-        WHERE (user_id = ? OR user_id = 1) AND source_file = ?
-    ''', (user_id, clean_filename))
+        WHERE (user_id = ? OR user_id = 1 OR ? = 1) AND source_file = ?
+    ''', (user_id, user_id, clean_filename))
     deleted_count = cursor.rowcount
     conn.commit()
     conn.close()
