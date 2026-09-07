@@ -27,11 +27,11 @@
             
             <!-- Auth User Control -->
             <div id="auth-header-container" class="flex items-center space-x-3">
-                <button onclick="openAuthModal('login')" id="btn-login-header" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-xs font-semibold backdrop-blur-sm transition-all flex items-center space-x-1.5">
+                <button onclick="openAuthModal('login')" id="btn-login-header" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-xs font-semibold backdrop-blur-sm transition-all flex items-center space-x-1.5 border border-white/20">
                     <i class="fa-solid fa-right-to-bracket text-sky-400"></i>
                     <span>Sign In / Register</span>
                 </button>
-                <div id="user-profile-badge" class="hidden flex items-center space-x-3 bg-white/10 px-4 py-2 rounded-lg text-xs font-semibold">
+                <div id="user-profile-badge" class="hidden flex items-center space-x-3 bg-white/10 px-4 py-2 rounded-lg text-xs font-semibold border border-white/20">
                     <i class="fa-solid fa-user-circle text-base text-sky-300"></i>
                     <span id="user-display-email">user@domain.com</span>
                     <button onclick="logoutUser()" class="text-rose-300 hover:text-rose-100 ml-2" title="Logout">
@@ -64,7 +64,7 @@
         <!-- TAB 1: BATCH EXCEL PROCESSING -->
         <div id="tab-batch" class="space-y-6">
             <div id="upload-card" class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center">
-                <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-blue-500 transition-colors cursor-pointer" id="dropzone" onclick="document.getElementById('excel-file').click()">
+                <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-blue-500 transition-colors cursor-pointer" id="dropzone" onclick="triggerGstUpload()">
                     <i class="fa-solid fa-cloud-arrow-up text-5xl text-blue-500 mb-4"></i>
                     <h3 class="text-lg font-semibold text-slate-700">Drag & Drop your Excel file for GST Processing</h3>
                     <p class="text-sm text-slate-400 mt-1">Supports .xlsx, .xls, and .csv files (Handles Multi-Sheet Workbooks)</p>
@@ -143,7 +143,7 @@
         <!-- TAB 2: MASTER CORPORATE DATA STORAGE -->
         <div id="tab-master" class="hidden space-y-6">
             <div class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center">
-                <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-purple-500 transition-colors cursor-pointer" onclick="document.getElementById('master-file').click()">
+                <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-purple-500 transition-colors cursor-pointer" onclick="triggerMasterUpload()">
                     <i class="fa-solid fa-box-archive text-5xl text-purple-600 mb-4"></i>
                     <h3 class="text-lg font-semibold text-slate-700">Upload New Master Corporate Dataset</h3>
                     <p class="text-sm text-slate-400 mt-1">Upload Master .xlsx / .csv containing INCORPORATION DATE, ROC, CAPITAL, EMAIL, ADDRESS, DIRECTORS, etc.</p>
@@ -226,7 +226,28 @@
 
     </main>
 
-    <!-- AUTH MODAL -->
+    <!-- AUTH REQUIRED MODAL NOTIFICATION -->
+    <div id="auth-gate-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl space-y-6 border border-slate-100 text-center">
+            <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <div class="space-y-2">
+                <h3 class="font-bold text-xl text-slate-800">Sign In Required</h3>
+                <p class="text-xs text-slate-500">You can explore all tabs and features! To upload files or search the master corporate dataset, please Sign In or Register a free account.</p>
+            </div>
+            <div class="flex space-x-3 pt-2">
+                <button onclick="closeAuthGateModal(); openAuthModal('login');" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs transition-colors">
+                    Sign In
+                </button>
+                <button onclick="closeAuthGateModal(); openAuthModal('register');" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-xs transition-colors">
+                    Create Account
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AUTH LOGIN / REGISTER MODAL -->
     <div id="auth-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl space-y-6 border border-slate-100">
             <div class="flex justify-between items-center border-b border-slate-100 pb-4">
@@ -284,6 +305,32 @@
             return h;
         }
 
+        function isUserLoggedIn() {
+            return authToken !== null && currentUser !== null;
+        }
+
+        function triggerAuthGate() {
+            if (!isUserLoggedIn()) {
+                document.getElementById('auth-gate-modal').classList.remove('hidden');
+                return true;
+            }
+            return false;
+        }
+
+        function closeAuthGateModal() {
+            document.getElementById('auth-gate-modal').classList.add('hidden');
+        }
+
+        function triggerGstUpload() {
+            if (triggerAuthGate()) return;
+            document.getElementById('excel-file').click();
+        }
+
+        function triggerMasterUpload() {
+            if (triggerAuthGate()) return;
+            document.getElementById('master-file').click();
+        }
+
         async function checkAuthStatus() {
             if (!authToken) {
                 document.getElementById('btn-login-header').classList.remove('hidden');
@@ -312,6 +359,8 @@
             currentUser = null;
             document.getElementById('btn-login-header').classList.remove('hidden');
             document.getElementById('user-profile-badge').classList.add('hidden');
+            fetchMasterStats();
+            fetchMasterFiles();
         }
 
         function openAuthModal(mode = 'login') {
@@ -438,6 +487,7 @@
         }
 
         async function deleteMasterFile(encodedFilename) {
+            if (triggerAuthGate()) return;
             const filename = decodeURIComponent(encodedFilename);
             if (!confirm(`Are you sure you want to delete the dataset '${filename}'? This will remove its records from your search database.`)) return;
 
@@ -456,6 +506,7 @@
         }
 
         async function uploadMasterFile(event) {
+            if (triggerAuthGate()) return;
             const file = event.target.files[0];
             if (!file) return;
 
@@ -487,12 +538,14 @@
         }
 
         async function handleFileSelect(event) {
+            if (triggerAuthGate()) return;
             selectedFile = event.target.files[0];
             if (!selectedFile) return;
             uploadFile();
         }
 
         async function uploadFile() {
+            if (triggerAuthGate()) return;
             const formData = new FormData();
             formData.append('file', selectedFile);
 
@@ -581,6 +634,7 @@
         }
 
         async function startProcessing() {
+            if (triggerAuthGate()) return;
             if (!currentJobId) return;
             await fetch(`/api/gst/process/${currentJobId}`, { method: 'POST', headers: getHeaders() });
             
@@ -637,6 +691,7 @@
         }
 
         async function performDeepSearch() {
+            if (triggerAuthGate()) return;
             const query = document.getElementById('search-input').value.trim();
             if (!query) return;
 
