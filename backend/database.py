@@ -15,6 +15,9 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute('PRAGMA page_size = 4096')
+    cursor.execute('PRAGMA journal_mode = WAL')
+    cursor.execute('PRAGMA synchronous = NORMAL')
 
     # 1. Users table
     cursor.execute('''
