@@ -11,6 +11,8 @@ if DATABASE_URL and (DATABASE_URL.startswith("postgresql://") or DATABASE_URL.st
     IS_POSTGRES = True
     if DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    if "ap-south-1" in DATABASE_URL and "cdrannqbwxauktmtzzel" in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.replace("ap-south-1", "ap-southeast-1")
 
 class UnifiedCursor:
     def __init__(self, conn, is_postgres=False):
