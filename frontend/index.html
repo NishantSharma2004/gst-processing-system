@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GST Processing & Business Search System</title>
+    <title>GST & Corporate Master Data Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -18,15 +18,26 @@
     <header class="gradient-bg text-white shadow-lg">
         <div class="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
             <div class="flex items-center space-x-3">
-                <i class="fa-solid fa-file-invoice-dollar text-3xl text-sky-400"></i>
+                <i class="fa-solid fa-building-columns text-3xl text-sky-400"></i>
                 <div>
-                    <h1 class="text-2xl font-bold tracking-wide">GST Processing System</h1>
-                    <p class="text-xs text-sky-200">Bulk Normalization, Deduplication & Company Search Engine</p>
+                    <h1 class="text-2xl font-bold tracking-wide">Corporate & GST Data Platform</h1>
+                    <p class="text-xs text-sky-200">Bulk Normalization, Master Data Storage & Sub-Millisecond Search</p>
                 </div>
             </div>
-            <div class="flex items-center space-x-2 bg-white/10 px-4 py-2 rounded-full text-xs font-semibold">
-                <span class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></span>
-                <span>System Ready (Free & Open Source)</span>
+            
+            <!-- Auth User Control -->
+            <div id="auth-header-container" class="flex items-center space-x-3">
+                <button onclick="openAuthModal('login')" id="btn-login-header" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-xs font-semibold backdrop-blur-sm transition-all flex items-center space-x-1.5">
+                    <i class="fa-solid fa-right-to-bracket text-sky-400"></i>
+                    <span>Sign In / Register</span>
+                </button>
+                <div id="user-profile-badge" class="hidden flex items-center space-x-3 bg-white/10 px-4 py-2 rounded-lg text-xs font-semibold">
+                    <i class="fa-solid fa-user-circle text-base text-sky-300"></i>
+                    <span id="user-display-email">user@domain.com</span>
+                    <button onclick="logoutUser()" class="text-rose-300 hover:text-rose-100 ml-2" title="Logout">
+                        <i class="fa-solid fa-power-off"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -35,46 +46,34 @@
     <main class="max-w-7xl mx-auto px-6 py-8">
         
         <!-- Navigation Tabs -->
-        <div class="flex border-b border-slate-200 mb-8">
-            <button id="tab-batch-btn" onclick="switchTab('batch')" class="px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none">
+        <div class="flex border-b border-slate-200 mb-8 overflow-x-auto">
+            <button id="tab-batch-btn" onclick="switchTab('batch')" class="px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none whitespace-nowrap">
                 <i class="fa-solid fa-file-excel"></i>
-                <span>Batch Excel Processing</span>
+                <span>1. GST Bulk Processing</span>
             </button>
-            <button id="tab-search-btn" onclick="switchTab('search')" class="px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none">
+            <button id="tab-master-btn" onclick="switchTab('master')" class="px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none whitespace-nowrap">
+                <i class="fa-solid fa-database"></i>
+                <span>2. Master Corporate Data Storage</span>
+            </button>
+            <button id="tab-search-btn" onclick="switchTab('search')" class="px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none whitespace-nowrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <span>Instant Company Search</span>
+                <span>3. Deep Corporate Search Engine</span>
             </button>
         </div>
 
         <!-- TAB 1: BATCH EXCEL PROCESSING -->
         <div id="tab-batch" class="space-y-6">
-            
-            <!-- Upload Box -->
             <div id="upload-card" class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center">
                 <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-blue-500 transition-colors cursor-pointer" id="dropzone" onclick="document.getElementById('excel-file').click()">
                     <i class="fa-solid fa-cloud-arrow-up text-5xl text-blue-500 mb-4"></i>
-                    <h3 class="text-lg font-semibold text-slate-700">Drag & Drop your Excel file here</h3>
+                    <h3 class="text-lg font-semibold text-slate-700">Drag & Drop your Excel file for GST Processing</h3>
                     <p class="text-sm text-slate-400 mt-1">Supports .xlsx, .xls, and .csv files (Handles Multi-Sheet Workbooks)</p>
                     <input type="file" id="excel-file" class="hidden" accept=".xlsx, .xls, .csv" onchange="handleFileSelect(event)">
-                </div>
-
-                <!-- Column Selection Modal -->
-                <div id="column-selector" class="hidden mt-6 bg-slate-50 p-6 rounded-xl text-left border border-slate-200">
-                    <h4 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-table-columns text-blue-500 mr-2"></i>Select GST Number Column:</h4>
-                    <div class="flex items-center space-x-4">
-                        <select id="col-select-dropdown" class="bg-white border border-slate-300 rounded-lg px-4 py-2 text-sm w-64 focus:ring-2 focus:ring-blue-500">
-                        </select>
-                        <button onclick="confirmUploadWithColumn()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg text-sm transition-colors">
-                            Confirm & Upload
-                        </button>
-                    </div>
                 </div>
             </div>
 
             <!-- Job Dashboard -->
             <div id="job-dashboard" class="hidden space-y-6">
-                
-                <!-- Metrics Summary Cards -->
                 <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
                         <p class="text-xs font-semibold text-slate-400 uppercase">Total Rows</p>
@@ -98,7 +97,6 @@
                     </div>
                 </div>
 
-                <!-- Live Progress Card -->
                 <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
                     <div class="flex justify-between items-center">
                         <div>
@@ -122,14 +120,13 @@
                                 <i class="fa-solid fa-file-arrow-down"></i>
                                 <span>Download 3-Sheet Excel</span>
                             </button>
-                            <button onclick="resetJob()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg font-semibold text-sm flex items-center space-x-1 transition-colors" title="Upload New File">
+                            <button onclick="resetJob()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg font-semibold text-sm flex items-center space-x-1 transition-colors">
                                 <i class="fa-solid fa-plus"></i>
                                 <span>New Upload</span>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Progress Bar -->
                     <div class="space-y-2">
                         <div class="flex justify-between text-xs font-semibold text-slate-600">
                             <span id="progress-text">Progress: 0%</span>
@@ -140,19 +137,52 @@
                         </div>
                     </div>
                 </div>
-
             </div>
-
         </div>
 
-        <!-- TAB 2: INSTANT COMPANY SEARCH -->
+        <!-- TAB 2: MASTER CORPORATE DATA UPLOAD -->
+        <div id="tab-master" class="hidden space-y-6">
+            <div class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center">
+                <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-purple-500 transition-colors cursor-pointer" onclick="document.getElementById('master-file').click()">
+                    <i class="fa-solid fa-box-archive text-5xl text-purple-600 mb-4"></i>
+                    <h3 class="text-lg font-semibold text-slate-700">Upload Corporate Master Data File</h3>
+                    <p class="text-sm text-slate-400 mt-1">Upload Master .xlsx / .csv containing INCORPORATION DATE, ROC, CAPITAL, EMAIL, ADDRESS, DIRECTORS, etc.</p>
+                    <input type="file" id="master-file" class="hidden" accept=".xlsx, .xls, .csv" onchange="uploadMasterFile(event)">
+                </div>
+
+                <div id="master-ingest-status" class="hidden mt-6 bg-purple-50 p-6 rounded-xl border border-purple-200 text-left">
+                    <div class="flex justify-between items-center">
+                        <h4 class="font-bold text-purple-900 text-base" id="master-filename">master_data.csv</h4>
+                        <span class="bg-purple-200 text-purple-800 text-xs px-3 py-1 rounded-full font-bold">Ingested</span>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-4 text-xs font-semibold text-purple-900">
+                        <div>Total Input Rows: <span id="master-total-input" class="font-bold text-slate-800">0</span></div>
+                        <div>Indexed Corporate Records: <span id="master-ingested-count" class="font-bold text-emerald-600">0</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Master Stats Summary Card -->
+            <div class="bg-gradient-to-r from-slate-900 to-indigo-900 text-white rounded-2xl p-6 shadow-md flex justify-between items-center">
+                <div class="space-y-1">
+                    <h4 class="text-sm font-semibold text-sky-300 uppercase tracking-wider">Your Master Corporate Database</h4>
+                    <p class="text-2xl font-extrabold" id="master-db-count">0 Companies Indexed</p>
+                </div>
+                <button onclick="switchTab('search')" class="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-xs transition-colors flex items-center space-x-2">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <span>Search Master Database</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 3: DEEP CORPORATE SEARCH ENGINE -->
         <div id="tab-search" class="hidden space-y-6">
             <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-                <h3 class="font-semibold text-slate-800 text-lg mb-2">Search Companies & GST Records</h3>
-                <p class="text-xs text-slate-400 mb-4">Search instantly by Company Legal Name, Trade Name, or GSTIN (Uses Sub-Millisecond Indexed Search)</p>
+                <h3 class="font-semibold text-slate-800 text-lg mb-1">Sub-Millisecond Corporate Search Engine</h3>
+                <p class="text-xs text-slate-400 mb-4">Search your master corporate files by Company Name, GSTIN, CIN, Director Name, or Pincode</p>
                 <div class="flex space-x-3">
-                    <input type="text" id="search-input" placeholder="Enter Legal Name, Trade Name, or GSTIN (e.g. Reliance, ABC Tech)..." class="flex-1 border border-slate-300 rounded-xl px-5 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    <button onclick="performSearch()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl text-sm transition-colors flex items-center space-x-2">
+                    <input type="text" id="search-input" placeholder="Enter Company Name, GSTIN, CIN, Director, or Pincode (e.g., Reliance, U24239HR...)..." class="flex-1 border border-slate-300 rounded-xl px-5 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <button onclick="performDeepSearch()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl text-sm transition-colors flex items-center space-x-2">
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <span>Search</span>
                     </button>
@@ -165,28 +195,207 @@
 
     </main>
 
+    <!-- AUTH MODAL -->
+    <div id="auth-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl space-y-6 border border-slate-100">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-4">
+                <h3 class="font-bold text-xl text-slate-800" id="auth-modal-title">Sign In to Your Account</h3>
+                <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="flex border-b border-slate-200">
+                <button id="auth-tab-login" onclick="switchAuthTab('login')" class="w-1/2 py-2 font-semibold text-sm border-b-2 border-blue-600 text-blue-600">Login</button>
+                <button id="auth-tab-register" onclick="switchAuthTab('register')" class="w-1/2 py-2 font-semibold text-sm border-b-2 border-transparent text-slate-400">Register</button>
+            </div>
+
+            <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                <div id="field-fullname" class="hidden space-y-1">
+                    <label class="text-xs font-semibold text-slate-600">Full Name</label>
+                    <input type="text" id="auth-fullname" class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Nishant Sharma">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-600">Email Address</label>
+                    <input type="email" id="auth-email" required class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="name@company.com">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-600">Password</label>
+                    <input type="password" id="auth-password" required class="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="••••••••">
+                </div>
+                <button type="submit" id="auth-submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg text-sm transition-colors">
+                    Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+
     <script>
+        let authToken = localStorage.getItem('auth_token') || null;
+        let currentUser = null;
         let currentJobId = localStorage.getItem('currentJobId') || null;
         let selectedFile = null;
         let pollTimer = null;
+        let authMode = 'login';
 
         window.onload = function() {
+            checkAuthStatus();
+            fetchMasterStats();
             if (currentJobId) {
                 restoreJob(currentJobId);
             }
         };
 
+        function getHeaders() {
+            const h = {};
+            if (authToken) {
+                h['Authorization'] = `Bearer ${authToken}`;
+            }
+            return h;
+        }
+
+        async function checkAuthStatus() {
+            if (!authToken) {
+                document.getElementById('btn-login-header').classList.remove('hidden');
+                document.getElementById('user-profile-badge').classList.add('hidden');
+                return;
+            }
+            try {
+                const res = await fetch('/api/auth/me', { headers: getHeaders() });
+                const data = await res.json();
+                if (data.logged_in) {
+                    currentUser = data.user;
+                    document.getElementById('user-display-email').innerText = currentUser.email;
+                    document.getElementById('btn-login-header').classList.add('hidden');
+                    document.getElementById('user-profile-badge').classList.remove('hidden');
+                } else {
+                    logoutUser();
+                }
+            } catch (e) {
+                logoutUser();
+            }
+        }
+
+        function logoutUser() {
+            localStorage.removeItem('auth_token');
+            authToken = null;
+            currentUser = null;
+            document.getElementById('btn-login-header').classList.remove('hidden');
+            document.getElementById('user-profile-badge').classList.add('hidden');
+        }
+
+        function openAuthModal(mode = 'login') {
+            authMode = mode;
+            switchAuthTab(mode);
+            document.getElementById('auth-modal').classList.remove('hidden');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('auth-modal').classList.add('hidden');
+        }
+
+        function switchAuthTab(mode) {
+            authMode = mode;
+            if (mode === 'login') {
+                document.getElementById('auth-modal-title').innerText = 'Sign In to Your Account';
+                document.getElementById('field-fullname').classList.add('hidden');
+                document.getElementById('auth-submit-btn').innerText = 'Sign In';
+                document.getElementById('auth-tab-login').className = "w-1/2 py-2 font-semibold text-sm border-b-2 border-blue-600 text-blue-600";
+                document.getElementById('auth-tab-register').className = "w-1/2 py-2 font-semibold text-sm border-b-2 border-transparent text-slate-400";
+            } else {
+                document.getElementById('auth-modal-title').innerText = 'Create New User Account';
+                document.getElementById('field-fullname').classList.remove('hidden');
+                document.getElementById('auth-submit-btn').innerText = 'Register Account';
+                document.getElementById('auth-tab-register').className = "w-1/2 py-2 font-semibold text-sm border-b-2 border-blue-600 text-blue-600";
+                document.getElementById('auth-tab-login').className = "w-1/2 py-2 font-semibold text-sm border-b-2 border-transparent text-slate-400";
+            }
+        }
+
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const fullName = document.getElementById('auth-fullname').value;
+
+            const url = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+            const body = authMode === 'login' ? { email, password } : { email, password, full_name: fullName };
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.detail || 'Authentication failed');
+                    return;
+                }
+                authToken = data.access_token;
+                localStorage.setItem('auth_token', authToken);
+                closeAuthModal();
+                checkAuthStatus();
+                fetchMasterStats();
+            } catch (err) {
+                alert('Auth error: ' + err);
+            }
+        }
+
         function switchTab(tab) {
+            document.getElementById('tab-batch').classList.add('hidden');
+            document.getElementById('tab-master').classList.add('hidden');
+            document.getElementById('tab-search').classList.add('hidden');
+
+            document.getElementById('tab-batch-btn').className = "px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none whitespace-nowrap";
+            document.getElementById('tab-master-btn').className = "px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none whitespace-nowrap";
+            document.getElementById('tab-search-btn').className = "px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none whitespace-nowrap";
+
             if (tab === 'batch') {
                 document.getElementById('tab-batch').classList.remove('hidden');
-                document.getElementById('tab-search').classList.add('hidden');
-                document.getElementById('tab-batch-btn').className = "px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none";
-                document.getElementById('tab-search-btn').className = "px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none";
-            } else {
-                document.getElementById('tab-batch').classList.add('hidden');
+                document.getElementById('tab-batch-btn').className = "px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none whitespace-nowrap";
+            } else if (tab === 'master') {
+                document.getElementById('tab-master').classList.remove('hidden');
+                document.getElementById('tab-master-btn').className = "px-6 py-3 font-semibold border-b-2 border-purple-600 text-purple-600 flex items-center space-x-2 focus:outline-none whitespace-nowrap";
+                fetchMasterStats();
+            } else if (tab === 'search') {
                 document.getElementById('tab-search').classList.remove('hidden');
-                document.getElementById('tab-search-btn').className = "px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none";
-                document.getElementById('tab-batch-btn').className = "px-6 py-3 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center space-x-2 focus:outline-none";
+                document.getElementById('tab-search-btn').className = "px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none whitespace-nowrap";
+            }
+        }
+
+        async function fetchMasterStats() {
+            try {
+                const res = await fetch('/api/master/stats', { headers: getHeaders() });
+                const data = await res.json();
+                document.getElementById('master-db-count').innerText = `${(data.total_master_records || 0).toLocaleString()} Companies Indexed`;
+            } catch (e) {}
+        }
+
+        async function uploadMasterFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            document.getElementById('master-ingest-status').classList.remove('hidden');
+            document.getElementById('master-filename').innerText = file.name + ' (Ingesting...)';
+
+            try {
+                const res = await fetch('/api/master/upload', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: formData
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert('Master Upload Error: ' + (data.detail || 'Failed to upload'));
+                    return;
+                }
+                document.getElementById('master-filename').innerText = data.filename;
+                document.getElementById('master-total-input').innerText = data.total_input_rows.toLocaleString();
+                document.getElementById('master-ingested-count').innerText = data.ingested_records.toLocaleString();
+                fetchMasterStats();
+            } catch (err) {
+                alert('Master upload failed: ' + err);
             }
         }
 
@@ -196,13 +405,16 @@
             uploadFile();
         }
 
-        async function uploadFile(selectedCol = null) {
+        async function uploadFile() {
             const formData = new FormData();
             formData.append('file', selectedFile);
-            if (selectedCol) formData.append('selected_column', selectedCol);
 
             try {
-                const res = await fetch('/api/gst/upload', { method: 'POST', body: formData });
+                const res = await fetch('/api/gst/upload', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: formData
+                });
                 const data = await res.json();
 
                 if (!res.ok) {
@@ -235,7 +447,7 @@
 
         async function restoreJob(jobId) {
             try {
-                const res = await fetch(`/api/gst/status/${jobId}`);
+                const res = await fetch(`/api/gst/status/${jobId}`, { headers: getHeaders() });
                 if (!res.ok) {
                     localStorage.removeItem('currentJobId');
                     return;
@@ -283,7 +495,7 @@
 
         async function startProcessing() {
             if (!currentJobId) return;
-            await fetch(`/api/gst/process/${currentJobId}`, { method: 'POST' });
+            await fetch(`/api/gst/process/${currentJobId}`, { method: 'POST', headers: getHeaders() });
             
             document.getElementById('btn-start').classList.add('hidden');
             document.getElementById('btn-retry-failed').classList.add('hidden');
@@ -295,7 +507,7 @@
 
         async function pauseProcessing() {
             if (!currentJobId) return;
-            await fetch(`/api/gst/pause/${currentJobId}`, { method: 'POST' });
+            await fetch(`/api/gst/pause/${currentJobId}`, { method: 'POST', headers: getHeaders() });
             clearInterval(pollTimer);
             document.getElementById('btn-pause').classList.add('hidden');
             document.getElementById('btn-start').classList.remove('hidden');
@@ -305,7 +517,7 @@
 
         async function pollStatus() {
             if (!currentJobId) return;
-            const res = await fetch(`/api/gst/status/${currentJobId}`);
+            const res = await fetch(`/api/gst/status/${currentJobId}`, { headers: getHeaders() });
             if (!res.ok) return;
             const data = await res.json();
 
@@ -337,39 +549,112 @@
             window.location.href = `/api/gst/export/${currentJobId}`;
         }
 
-        async function performSearch() {
+        async function performDeepSearch() {
             const query = document.getElementById('search-input').value.trim();
             if (!query) return;
 
             const resultsContainer = document.getElementById('search-results');
-            resultsContainer.innerHTML = '<p class="text-sm text-slate-400">Searching...</p>';
+            resultsContainer.innerHTML = '<p class="text-sm text-slate-400">Searching master corporate database...</p>';
 
             try {
-                const res = await fetch(`/api/gst/company-search?name=${encodeURIComponent(query)}`);
+                const res = await fetch(`/api/master/search?q=${encodeURIComponent(query)}`, { headers: getHeaders() });
                 const data = await res.json();
 
-                if (data.results.length === 0) {
-                    resultsContainer.innerHTML = '<div class="bg-white p-6 rounded-xl border border-slate-200 text-slate-500 text-sm">No records found matching your query. Try uploading an Excel file first to populate company records!</div>';
+                if (data.master_results.length === 0 && data.gst_results.length === 0) {
+                    resultsContainer.innerHTML = '<div class="bg-white p-6 rounded-xl border border-slate-200 text-slate-500 text-sm">No records found. Upload a Corporate Master file in Tab 2 to populate company records!</div>';
                     return;
                 }
 
-                let html = `<p class="text-xs font-semibold text-slate-500 uppercase mb-3">Found ${data.total_results} matching company record(s)</p>`;
-                data.results.forEach(rec => {
-                    html += `
-                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors flex justify-between items-center">
-                            <div class="space-y-1">
-                                <div class="flex items-center space-x-3">
-                                    <h4 class="font-bold text-slate-800 text-base">${rec.legal_name || 'N/A'}</h4>
-                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${rec.gst_status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${rec.gst_status || 'N/A'}</span>
+                let html = '';
+
+                // Master Corporate Cards (Full 20+ fields)
+                if (data.master_results.length > 0) {
+                    html += `<p class="text-xs font-bold text-purple-700 uppercase tracking-wider mb-3">Found ${data.total_master_results} Master Corporate Record(s)</p>`;
+                    data.master_results.forEach(rec => {
+                        html += `
+                            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4 hover:border-purple-300 transition-colors">
+                                <div class="flex justify-between items-start border-b border-slate-100 pb-3">
+                                    <div>
+                                        <h4 class="text-lg font-bold text-slate-800">${rec.company_name}</h4>
+                                        <p class="text-xs text-slate-400 mt-0.5">CIN: <span class="font-mono font-semibold text-slate-600">${rec.cin || 'N/A'}</span> | GSTIN: <span class="font-mono font-semibold text-blue-600">${rec.gstin || 'N/A'}</span></p>
+                                    </div>
+                                    <span class="px-3 py-1 rounded-full text-xs font-bold ${rec.company_status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${rec.company_status || 'Active'}</span>
                                 </div>
-                                <p class="text-xs text-slate-500">Trade Name: <span class="font-semibold text-slate-700">${rec.trade_name || 'N/A'}</span> | Type: <span class="font-semibold text-slate-700">${rec.business_type || 'N/A'}</span></p>
+
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <span class="text-slate-400 block font-semibold uppercase">Incorporation Date</span>
+                                        <span class="font-bold text-slate-700 mt-0.5 block">${rec.incorporation_date || 'N/A'}</span>
+                                    </div>
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <span class="text-slate-400 block font-semibold uppercase">ROC Office</span>
+                                        <span class="font-bold text-slate-700 mt-0.5 block">${rec.roc || 'N/A'}</span>
+                                    </div>
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <span class="text-slate-400 block font-semibold uppercase">Auth Capital</span>
+                                        <span class="font-bold text-emerald-600 mt-0.5 block">${rec.authorized_capital || 'N/A'}</span>
+                                    </div>
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <span class="text-slate-400 block font-semibold uppercase">Paid Capital</span>
+                                        <span class="font-bold text-emerald-600 mt-0.5 block">${rec.paid_capital || 'N/A'}</span>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                    <div>
+                                        <span class="text-slate-400 font-semibold uppercase block mb-1">Company Class & Category</span>
+                                        <p class="text-slate-700"><span class="font-bold">${rec.category || 'N/A'}</span> (${rec.class_type || 'Private'}) | Sub: ${rec.sub_category || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <span class="text-slate-400 font-semibold uppercase block mb-1">Contact Email</span>
+                                        <p class="text-blue-600 font-semibold">${rec.email || 'N/A'}</p>
+                                    </div>
+                                </div>
+
+                                <div class="text-xs border-t border-slate-100 pt-3">
+                                    <span class="text-slate-400 font-semibold uppercase block mb-1">Registered Address</span>
+                                    <p class="text-slate-700 font-medium">${rec.address || 'N/A'} ${rec.district ? ', ' + rec.district : ''} ${rec.state ? ', ' + rec.state : ''} ${rec.pincode ? ' - ' + rec.pincode : ''}</p>
+                                </div>
+
+                                ${rec.directors ? `
+                                    <div class="text-xs bg-purple-50 p-3 rounded-xl border border-purple-100">
+                                        <span class="text-purple-900 font-bold uppercase block mb-1"><i class="fa-solid fa-users text-purple-600 mr-1"></i> Directors / Management</span>
+                                        <p class="text-purple-950 font-medium">${rec.directors}</p>
+                                    </div>
+                                ` : ''}
+
+                                ${rec.charges ? `
+                                    <div class="text-xs bg-amber-50 p-3 rounded-xl border border-amber-100">
+                                        <span class="text-amber-900 font-bold uppercase block mb-1"><i class="fa-solid fa-credit-card text-amber-600 mr-1"></i> Charges / Mortgages</span>
+                                        <p class="text-amber-950 font-medium">${rec.charges}</p>
+                                    </div>
+                                ` : ''}
                             </div>
-                            <div class="text-right">
-                                <span class="font-mono text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">${rec.gstin}</span>
+                        `;
+                    });
+                }
+
+                // GST Search Results
+                if (data.gst_results.length > 0) {
+                    html += `<p class="text-xs font-bold text-blue-700 uppercase tracking-wider mt-6 mb-3">Found ${data.total_gst_results} Verified GST Record(s)</p>`;
+                    data.gst_results.forEach(rec => {
+                        html += `
+                            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors flex justify-between items-center">
+                                <div class="space-y-1">
+                                    <div class="flex items-center space-x-3">
+                                        <h4 class="font-bold text-slate-800 text-base">${rec.legal_name || 'N/A'}</h4>
+                                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${rec.gst_status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${rec.gst_status || 'N/A'}</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500">Trade Name: <span class="font-semibold text-slate-700">${rec.trade_name || 'N/A'}</span> | Type: <span class="font-semibold text-slate-700">${rec.business_type || 'N/A'}</span></p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-mono text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">${rec.gstin}</span>
+                                </div>
                             </div>
-                        </div>
-                    `;
-                });
+                        `;
+                    });
+                }
+
                 resultsContainer.innerHTML = html;
             } catch (err) {
                 resultsContainer.innerHTML = `<p class="text-sm text-rose-500">Search error: ${err}</p>`;
@@ -377,7 +662,7 @@
         }
 
         document.getElementById('search-input').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') performSearch();
+            if (e.key === 'Enter') performDeepSearch();
         });
     </script>
 </body>

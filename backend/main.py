@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, BackgroundTasks, Form, HTTPException, Query
+from fastapi import FastAPI, File, UploadFile, BackgroundTasks, Form, HTTPException, Query, Request, Header
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,12 +8,15 @@ import io
 import asyncio
 from datetime import datetime
 import sqlite3
+from typing import Optional
 
 from .database import init_db, get_db, save_gst_record
 from .excel_service import parse_and_clean_excel, generate_3sheet_excel
 from .job_runner import run_processing_job, pause_flags
+from .auth import hash_password, verify_password, generate_token, verify_token
+from .master_service import parse_and_ingest_master_file
 
-app = FastAPI(title="GST Processing System")
+app = FastAPI(title="GST & Master Corporate Data System")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +32,22 @@ def startup():
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
+def get_current_user_from_req(request: Request) -> dict:
+    auth_header = request.headers.get("Authorization")
+    token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    if not token:
+        token = request.query_params.get("token")
+        
+    if token:
+        payload = verify_token(token)
+        if payload:
+            return payload
+
+    # Default fallback for guest/public usage
+    return {"user_id": 1, "email": "guest@system.local"}
+
 @app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return FileResponse(os.path.join(frontend_path, "index.html"))
@@ -37,8 +56,77 @@ def read_root():
 def health_check():
     return {"status": "ok"}
 
+# --- AUTH ENDPOINTS ---
+
+@app.post("/api/auth/register")
+async def register_user(data: dict):
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "")
+    full_name = data.get("full_name", "").strip()
+
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    if not password or len(password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+    if cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Email is already registered. Please login.")
+
+    pwd_hash = hash_password(password)
+    cursor.execute("INSERT INTO users (email, password_hash, full_name) VALUES (?, ?, ?)", (email, pwd_hash, full_name))
+    user_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    token = generate_token(user_id, email)
+    return {
+        "message": "User registered successfully",
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"user_id": user_id, "email": email, "full_name": full_name}
+    }
+
+@app.post("/api/auth/login")
+async def login_user(data: dict):
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user or not verify_password(password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    user_dict = dict(user)
+    token = generate_token(user_dict["id"], user_dict["email"])
+    return {
+        "message": "Login successful",
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"user_id": user_dict["id"], "email": user_dict["email"], "full_name": user_dict["full_name"]}
+    }
+
+@app.get("/api/auth/me")
+def get_user_profile(request: Request):
+    user = get_current_user_from_req(request)
+    if user["user_id"] == 1 and user["email"] == "guest@system.local":
+        return {"logged_in": False, "user": user}
+    return {"logged_in": True, "user": user}
+
+# --- GST BULK PROCESSING ENDPOINTS ---
+
 @app.post("/api/gst/upload")
-async def upload_excel(file: UploadFile = File(...), selected_column: str = Form(None)):
+async def upload_excel(request: Request, file: UploadFile = File(...), selected_column: str = Form(None)):
+    user = get_current_user_from_req(request)
+    user_id = user["user_id"]
+
     if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
         raise HTTPException(status_code=400, detail="Invalid file type. Upload .xlsx, .xls, or .csv")
 
@@ -51,26 +139,26 @@ async def upload_excel(file: UploadFile = File(...), selected_column: str = Form
 
     cursor.execute('''
         INSERT INTO processing_jobs (
-            job_id, filename, total_rows, valid_gst_count, invalid_gst_count,
+            user_id, job_id, filename, total_rows, valid_gst_count, invalid_gst_count,
             unique_gst_count, duplicates_removed, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Created')
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Created')
     ''', (
-        job_id, file.filename, parsed['total_rows'], parsed['valid_gst_count'],
+        user_id, job_id, file.filename, parsed['total_rows'], parsed['valid_gst_count'],
         parsed['invalid_gst_count'], parsed['unique_gst_count'], parsed['duplicates_removed']
     ))
 
     for gstin, row_refs in parsed['valid_items'].items():
         cursor.execute('''
-            INSERT INTO processing_items (job_id, gstin, original_row_numbers, status)
-            VALUES (?, ?, ?, 'Pending')
-        ''', (job_id, gstin, ",".join(row_refs)))
+            INSERT INTO processing_items (user_id, job_id, gstin, original_row_numbers, status)
+            VALUES (?, ?, ?, ?, 'Pending')
+        ''', (user_id, job_id, gstin, ",".join(row_refs)))
 
     for inv in parsed['invalid_items']:
         ref = f"{inv.get('sheet_name','Sheet1')}:R{inv.get('row_num','?')}"
         cursor.execute('''
-            INSERT INTO processing_items (job_id, gstin, original_row_numbers, status, error_type, error_message)
-            VALUES (?, ?, ?, 'Invalid', ?, ?)
-        ''', (job_id, inv['gstin'], ref, inv['error_type'], inv['error_message']))
+            INSERT INTO processing_items (user_id, job_id, gstin, original_row_numbers, status, error_type, error_message)
+            VALUES (?, ?, ?, ?, 'Invalid', ?, ?)
+        ''', (user_id, job_id, inv['gstin'], ref, inv['error_type'], inv['error_message']))
 
     conn.commit()
     conn.close()
@@ -142,37 +230,81 @@ def get_status(job_id: str):
         'completed_at': job['completed_at']
     }
 
-@app.get("/api/gst/company-search")
-def search_company(name: str = Query(..., min_length=2)):
+# --- MASTER CORPORATE DATA ENDPOINTS ---
+
+@app.post("/api/master/upload")
+async def upload_master(request: Request, file: UploadFile = File(...)):
+    user = get_current_user_from_req(request)
+    user_id = user["user_id"]
+
+    if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="Invalid file type. Upload .xlsx, .xls, or .csv")
+
+    contents = await file.read()
+    res = parse_and_ingest_master_file(contents, file.filename, user_id)
+
+    return {
+        "message": "Master corporate data uploaded and indexed successfully",
+        "filename": res["filename"],
+        "total_input_rows": res["total_input_rows"],
+        "ingested_records": res["ingested_records"]
+    }
+
+@app.get("/api/master/stats")
+def master_stats(request: Request):
+    user = get_current_user_from_req(request)
+    user_id = user["user_id"]
     conn = get_db()
     cursor = conn.cursor()
-    clean_query = name.strip().upper()
+    cursor.execute("SELECT COUNT(*) as cnt FROM company_master_records WHERE user_id = ? OR user_id = 1", (user_id,))
+    cnt = cursor.fetchone()["cnt"]
+    conn.close()
+    return {"total_master_records": cnt}
+
+@app.get("/api/master/search")
+def search_deep_company(request: Request, q: str = Query(..., min_length=2)):
+    user = get_current_user_from_req(request)
+    user_id = user["user_id"]
+
+    conn = get_db()
+    cursor = conn.cursor()
+    clean_query = q.strip().upper()
     pattern = f"%{clean_query}%"
 
+    # 1. Search Master Corporate Records (All 20+ fields)
+    cursor.execute('''
+        SELECT * FROM company_master_records 
+        WHERE (user_id = ? OR user_id = 1) AND (
+            UPPER(company_name) LIKE ? OR UPPER(gstin) LIKE ? OR UPPER(cin) LIKE ? OR UPPER(directors) LIKE ? OR UPPER(pincode) LIKE ?
+        )
+        LIMIT 50
+    ''', (user_id, pattern, pattern, pattern, pattern, pattern))
+    master_rows = [dict(r) for r in cursor.fetchall()]
+
+    # 2. Search GST Records
     cursor.execute('''
         SELECT gstin, legal_name, trade_name, gst_status, business_type, last_checked_at 
         FROM gst_records 
-        WHERE UPPER(legal_name) LIKE ? OR UPPER(trade_name) LIKE ? OR UPPER(gstin) LIKE ?
+        WHERE (user_id = ? OR user_id = 1) AND (
+            UPPER(legal_name) LIKE ? OR UPPER(trade_name) LIKE ? OR UPPER(gstin) LIKE ?
+        )
         LIMIT 50
-    ''', (pattern, pattern, pattern))
-    rows = [dict(r) for r in cursor.fetchall()]
-
-    if not rows:
-        cursor.execute('''
-            SELECT gstin, 'Processed Record' as legal_name, 'Processing Record' as trade_name, status as gst_status, 'GSTIN Record' as business_type, processed_at as last_checked_at
-            FROM processing_items
-            WHERE UPPER(gstin) LIKE ?
-            LIMIT 50
-        ''', (pattern,))
-        rows = [dict(r) for r in cursor.fetchall()]
+    ''', (user_id, pattern, pattern, pattern))
+    gst_rows = [dict(r) for r in cursor.fetchall()]
 
     conn.close()
 
     return {
-        'search_query': name,
-        'total_results': len(rows),
-        'results': rows
+        'query': q,
+        'total_master_results': len(master_rows),
+        'total_gst_results': len(gst_rows),
+        'master_results': master_rows,
+        'gst_results': gst_rows
     }
+
+@app.get("/api/gst/company-search")
+def search_company(request: Request, name: str = Query(..., min_length=2)):
+    return search_deep_company(request, q=name)
 
 @app.get("/api/gst/export/{job_id}")
 def export_excel(job_id: str):
