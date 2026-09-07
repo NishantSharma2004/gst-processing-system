@@ -119,11 +119,12 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
     conn = get_db()
     cursor = conn.cursor()
 
-    try:
-        cursor.execute('PRAGMA synchronous = NORMAL')
-        cursor.execute('PRAGMA journal_mode = WAL')
-    except Exception:
-        pass
+    if not getattr(conn, 'is_postgres', False):
+        try:
+            cursor.execute('PRAGMA synchronous = NORMAL')
+            cursor.execute('PRAGMA journal_mode = WAL')
+        except Exception:
+            pass
 
     if filename.endswith('.csv'):
         chunk_iter = pd.read_csv(io.BytesIO(file_bytes), chunksize=5000, low_memory=False, on_bad_lines='skip')
