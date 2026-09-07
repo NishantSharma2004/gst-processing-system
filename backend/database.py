@@ -99,6 +99,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS company_master_records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
+        source_file TEXT,
         cin TEXT,
         company_name TEXT NOT NULL,
         gstin TEXT,
@@ -124,7 +125,15 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users (id)
     )
     ''')
+    
+    # Check source_file column migration
+    cursor.execute("PRAGMA table_info(company_master_records)")
+    cols = [r['name'] for r in cursor.fetchall()]
+    if 'source_file' not in cols:
+        cursor.execute("ALTER TABLE company_master_records ADD COLUMN source_file TEXT")
+
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_user ON company_master_records(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_source ON company_master_records(user_id, source_file)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_name ON company_master_records(company_name)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_gstin ON company_master_records(gstin)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_master_cin ON company_master_records(cin)')

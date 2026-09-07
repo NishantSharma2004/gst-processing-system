@@ -45,7 +45,6 @@ def get_current_user_from_req(request: Request) -> dict:
         if payload:
             return payload
 
-    # Default fallback for guest/public usage
     return {"user_id": 1, "email": "guest@system.local"}
 
 @app.api_route("/", methods=["GET", "HEAD"])
@@ -250,6 +249,45 @@ async def upload_master(request: Request, file: UploadFile = File(...)):
         "ingested_records": res["ingested_records"]
     }
 
+@app.get("/api/master/files")
+def get_master_files(request: Request):
+    user = get_current_user_from_req(request)
+    user_id = user["user_id"]
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT source_file as filename, COUNT(*) as total_records, MIN(created_at) as created_at
+        FROM company_master_records
+        WHERE (user_id = ? OR user_id = 1) AND source_file IS NOT NULL AND source_file != ''
+        GROUP BY source_file
+        ORDER BY created_at DESC
+    ''', (user_id,))
+    files = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    return {"files": files}
+
+@app.delete("/api/master/files/{filename}")
+def delete_master_file(filename: str, request: Request):
+    user = get_current_user_from_req(request)
+    user_id = user["user_id"]
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        DELETE FROM company_master_records
+        WHERE (user_id = ? OR user_id = 1) AND source_file = ?
+    ''', (user_id, filename))
+    deleted_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+
+    return {
+        "message": f"Dataset '{filename}' deleted successfully",
+        "deleted_records": deleted_count
+    }
+
 @app.get("/api/master/stats")
 def master_stats(request: Request):
     user = get_current_user_from_req(request)
@@ -271,7 +309,6 @@ def search_deep_company(request: Request, q: str = Query(..., min_length=2)):
     clean_query = q.strip().upper()
     pattern = f"%{clean_query}%"
 
-    # 1. Search Master Corporate Records (All 20+ fields)
     cursor.execute('''
         SELECT * FROM company_master_records 
         WHERE (user_id = ? OR user_id = 1) AND (
@@ -281,7 +318,6 @@ def search_deep_company(request: Request, q: str = Query(..., min_length=2)):
     ''', (user_id, pattern, pattern, pattern, pattern, pattern))
     master_rows = [dict(r) for r in cursor.fetchall()]
 
-    # 2. Search GST Records
     cursor.execute('''
         SELECT gstin, legal_name, trade_name, gst_status, business_type, last_checked_at 
         FROM gst_records 

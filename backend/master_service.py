@@ -39,7 +39,6 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
             
         total_records += len(df)
 
-        # Detect columns
         col_name = find_column(df, ['company name', 'legal name', 'company', 'name', 'entity name'])
         col_cin = find_column(df, ['cin', 'registration no', 'reg no', 'corporate id'])
         col_gstin = find_column(df, ['gstin', 'gst number', 'gst', 'gstin/uin'])
@@ -66,7 +65,6 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
         for idx, row in df.iterrows():
             c_name = clean_str(row[col_name]) if col_name else ""
             if not c_name:
-                # If no company name column matched, pick first non-empty text
                 for cell in row:
                     val = clean_str(cell)
                     if len(val) > 3 and not val.isdigit():
@@ -97,7 +95,7 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
             directors = clean_str(row[col_directors]) if col_directors else ""
 
             batch.append((
-                user_id, cin, c_name, gstin, inc_date, status, roc, reg_no,
+                user_id, filename, cin, c_name, gstin, inc_date, status, roc, reg_no,
                 category, sub_category, class_type, auth_cap, paid_cap, listing,
                 email, address, state, district, pincode, activity, charges, directors
             ))
@@ -105,11 +103,11 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
             if len(batch) >= 5000:
                 cursor.executemany('''
                     INSERT INTO company_master_records (
-                        user_id, cin, company_name, gstin, incorporation_date, company_status,
+                        user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
                         roc, registration_no, category, sub_category, class_type,
                         authorized_capital, paid_capital, listing_status, email, address,
                         state, district, pincode, activity, charges, directors
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', batch)
                 conn.commit()
                 ingested_records += len(batch)
@@ -118,11 +116,11 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
         if batch:
             cursor.executemany('''
                 INSERT INTO company_master_records (
-                    user_id, cin, company_name, gstin, incorporation_date, company_status,
+                    user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
                     roc, registration_no, category, sub_category, class_type,
                     authorized_capital, paid_capital, listing_status, email, address,
                     state, district, pincode, activity, charges, directors
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', batch)
             conn.commit()
             ingested_records += len(batch)

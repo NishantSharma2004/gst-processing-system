@@ -140,12 +140,12 @@
             </div>
         </div>
 
-        <!-- TAB 2: MASTER CORPORATE DATA UPLOAD -->
+        <!-- TAB 2: MASTER CORPORATE DATA STORAGE -->
         <div id="tab-master" class="hidden space-y-6">
             <div class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center">
                 <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-purple-500 transition-colors cursor-pointer" onclick="document.getElementById('master-file').click()">
                     <i class="fa-solid fa-box-archive text-5xl text-purple-600 mb-4"></i>
-                    <h3 class="text-lg font-semibold text-slate-700">Upload Corporate Master Data File</h3>
+                    <h3 class="text-lg font-semibold text-slate-700">Upload New Master Corporate Dataset</h3>
                     <p class="text-sm text-slate-400 mt-1">Upload Master .xlsx / .csv containing INCORPORATION DATE, ROC, CAPITAL, EMAIL, ADDRESS, DIRECTORS, etc.</p>
                     <input type="file" id="master-file" class="hidden" accept=".xlsx, .xls, .csv" onchange="uploadMasterFile(event)">
                 </div>
@@ -165,13 +165,44 @@
             <!-- Master Stats Summary Card -->
             <div class="bg-gradient-to-r from-slate-900 to-indigo-900 text-white rounded-2xl p-6 shadow-md flex justify-between items-center">
                 <div class="space-y-1">
-                    <h4 class="text-sm font-semibold text-sky-300 uppercase tracking-wider">Your Master Corporate Database</h4>
+                    <h4 class="text-sm font-semibold text-sky-300 uppercase tracking-wider">Your Master Corporate Datasets</h4>
                     <p class="text-2xl font-extrabold" id="master-db-count">0 Companies Indexed</p>
                 </div>
                 <button onclick="switchTab('search')" class="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-xs transition-colors flex items-center space-x-2">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <span>Search Master Database</span>
+                    <span>Search Active Datasets</span>
                 </button>
+            </div>
+
+            <!-- Master Dataset Files Management Table -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h4 class="font-bold text-slate-800 text-base flex items-center space-x-2">
+                        <i class="fa-solid fa-folder-tree text-purple-600"></i>
+                        <span>Uploaded Master Files Dataset Library</span>
+                    </h4>
+                    <button onclick="fetchMasterFiles()" class="text-xs font-semibold text-purple-600 hover:text-purple-800">
+                        <i class="fa-solid fa-rotate-right mr-1"></i>Refresh List
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-200">
+                            <tr>
+                                <th class="py-3 px-4">Dataset Filename</th>
+                                <th class="py-3 px-4">Indexed Corporate Records</th>
+                                <th class="py-3 px-4">Upload Date</th>
+                                <th class="py-3 px-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="master-files-table-body" class="divide-y divide-slate-100 text-slate-700 font-medium">
+                            <tr>
+                                <td colspan="4" class="py-6 text-center text-slate-400">No master datasets uploaded yet. Upload your first master file above!</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -179,7 +210,7 @@
         <div id="tab-search" class="hidden space-y-6">
             <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                 <h3 class="font-semibold text-slate-800 text-lg mb-1">Sub-Millisecond Corporate Search Engine</h3>
-                <p class="text-xs text-slate-400 mb-4">Search your master corporate files by Company Name, GSTIN, CIN, Director Name, or Pincode</p>
+                <p class="text-xs text-slate-400 mb-4">Search across all active datasets by Company Name, GSTIN, CIN, Director Name, or Pincode</p>
                 <div class="flex space-x-3">
                     <input type="text" id="search-input" placeholder="Enter Company Name, GSTIN, CIN, Director, or Pincode (e.g., Reliance, U24239HR...)..." class="flex-1 border border-slate-300 rounded-xl px-5 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                     <button onclick="performDeepSearch()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl text-sm transition-colors flex items-center space-x-2">
@@ -239,6 +270,7 @@
         window.onload = function() {
             checkAuthStatus();
             fetchMasterStats();
+            fetchMasterFiles();
             if (currentJobId) {
                 restoreJob(currentJobId);
             }
@@ -334,6 +366,7 @@
                 closeAuthModal();
                 checkAuthStatus();
                 fetchMasterStats();
+                fetchMasterFiles();
             } catch (err) {
                 alert('Auth error: ' + err);
             }
@@ -355,6 +388,7 @@
                 document.getElementById('tab-master').classList.remove('hidden');
                 document.getElementById('tab-master-btn').className = "px-6 py-3 font-semibold border-b-2 border-purple-600 text-purple-600 flex items-center space-x-2 focus:outline-none whitespace-nowrap";
                 fetchMasterStats();
+                fetchMasterFiles();
             } else if (tab === 'search') {
                 document.getElementById('tab-search').classList.remove('hidden');
                 document.getElementById('tab-search-btn').className = "px-6 py-3 font-semibold border-b-2 border-blue-600 text-blue-600 flex items-center space-x-2 focus:outline-none whitespace-nowrap";
@@ -367,6 +401,58 @@
                 const data = await res.json();
                 document.getElementById('master-db-count').innerText = `${(data.total_master_records || 0).toLocaleString()} Companies Indexed`;
             } catch (e) {}
+        }
+
+        async function fetchMasterFiles() {
+            try {
+                const res = await fetch('/api/master/files', { headers: getHeaders() });
+                const data = await res.json();
+                const tbody = document.getElementById('master-files-table-body');
+                
+                if (!data.files || data.files.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400">No master datasets uploaded yet. Upload your first master file above!</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                data.files.forEach(f => {
+                    html += `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="py-3 px-4 font-bold text-slate-800 flex items-center space-x-2">
+                                <i class="fa-solid fa-file-csv text-purple-600"></i>
+                                <span>${f.filename}</span>
+                            </td>
+                            <td class="py-3 px-4 font-bold text-emerald-600">${f.total_records.toLocaleString()} records</td>
+                            <td class="py-3 px-4 text-slate-400">${f.created_at || 'N/A'}</td>
+                            <td class="py-3 px-4 text-right">
+                                <button onclick="deleteMasterFile('${encodeURIComponent(f.filename)}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold px-3 py-1 rounded-lg text-xs transition-colors flex items-center space-x-1 ml-auto">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                    <span>Delete Dataset</span>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            } catch (e) {}
+        }
+
+        async function deleteMasterFile(encodedFilename) {
+            const filename = decodeURIComponent(encodedFilename);
+            if (!confirm(`Are you sure you want to delete the dataset '${filename}'? This will remove its records from your search database.`)) return;
+
+            try {
+                const res = await fetch(`/api/master/files/${encodedFilename}`, {
+                    method: 'DELETE',
+                    headers: getHeaders()
+                });
+                const data = await res.json();
+                alert(data.message);
+                fetchMasterStats();
+                fetchMasterFiles();
+            } catch (err) {
+                alert('Failed to delete dataset: ' + err);
+            }
         }
 
         async function uploadMasterFile(event) {
@@ -394,6 +480,7 @@
                 document.getElementById('master-total-input').innerText = data.total_input_rows.toLocaleString();
                 document.getElementById('master-ingested-count').innerText = data.ingested_records.toLocaleString();
                 fetchMasterStats();
+                fetchMasterFiles();
             } catch (err) {
                 alert('Master upload failed: ' + err);
             }
@@ -567,7 +654,6 @@
 
                 let html = '';
 
-                // Master Corporate Cards (Full 20+ fields)
                 if (data.master_results.length > 0) {
                     html += `<p class="text-xs font-bold text-purple-700 uppercase tracking-wider mb-3">Found ${data.total_master_results} Master Corporate Record(s)</p>`;
                     data.master_results.forEach(rec => {
@@ -576,7 +662,7 @@
                                 <div class="flex justify-between items-start border-b border-slate-100 pb-3">
                                     <div>
                                         <h4 class="text-lg font-bold text-slate-800">${rec.company_name}</h4>
-                                        <p class="text-xs text-slate-400 mt-0.5">CIN: <span class="font-mono font-semibold text-slate-600">${rec.cin || 'N/A'}</span> | GSTIN: <span class="font-mono font-semibold text-blue-600">${rec.gstin || 'N/A'}</span></p>
+                                        <p class="text-xs text-slate-400 mt-0.5">CIN: <span class="font-mono font-semibold text-slate-600">${rec.cin || 'N/A'}</span> | GSTIN: <span class="font-mono font-semibold text-blue-600">${rec.gstin || 'N/A'}</span> | Dataset: <span class="font-semibold text-purple-600">${rec.source_file || 'Master File'}</span></p>
                                     </div>
                                     <span class="px-3 py-1 rounded-full text-xs font-bold ${rec.company_status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${rec.company_status || 'Active'}</span>
                                 </div>
@@ -634,7 +720,6 @@
                     });
                 }
 
-                // GST Search Results
                 if (data.gst_results.length > 0) {
                     html += `<p class="text-xs font-bold text-blue-700 uppercase tracking-wider mt-6 mb-3">Found ${data.total_gst_results} Verified GST Record(s)</p>`;
                     data.gst_results.forEach(rec => {
