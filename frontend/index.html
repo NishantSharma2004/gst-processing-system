@@ -164,9 +164,10 @@
                     <div class="w-full bg-purple-200 rounded-full h-2.5 overflow-hidden">
                         <div id="master-progress-bar" class="bg-purple-600 h-2.5 rounded-full transition-all duration-300 w-1/3 animate-pulse"></div>
                     </div>
-                    <div class="grid grid-cols-2 gap-4 text-xs font-semibold text-purple-900 pt-1">
+                    <div class="grid grid-cols-3 gap-4 text-xs font-semibold text-purple-900 pt-1">
                         <div>Total Input Rows: <span id="master-total-input" class="font-bold text-slate-800">Calculating...</span></div>
-                        <div>Indexed Corporate Records: <span id="master-ingested-count" class="font-bold text-emerald-600">Syncing with Supabase...</span></div>
+                        <div>Indexed Records: <span id="master-ingested-count" class="font-bold text-emerald-600">Syncing...</span></div>
+                        <div>Duplicates Filtered: <span id="master-dedup-count" class="font-bold text-purple-700">0</span></div>
                     </div>
                 </div>
             </div>
@@ -664,6 +665,7 @@
                     fileNameElem.innerText = data.filename;
                     totalInputElem.innerText = data.total_input_rows.toLocaleString();
                     ingestedCountElem.innerText = data.ingested_records.toLocaleString();
+                    document.getElementById('master-dedup-count').innerText = (data.duplicates_removed || 0).toLocaleString();
 
                     progressBar.className = "bg-emerald-500 h-2.5 rounded-full transition-all duration-300 w-full";
                     badgeElem.className = "bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold flex items-center space-x-1";

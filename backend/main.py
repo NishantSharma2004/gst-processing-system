@@ -290,6 +290,7 @@ async def upload_master(request: Request, file: UploadFile = File(...)):
             "filename": res["filename"],
             "total_input_rows": res["total_input_rows"],
             "ingested_records": res["ingested_records"],
+            "duplicates_removed": res.get("duplicates_removed", 0),
             "ingestion_speed": f"{round(res['ingested_records'] / duration_sec, 1)} rows/sec" if duration_sec > 0 else "N/A"
         }
     except Exception as e:

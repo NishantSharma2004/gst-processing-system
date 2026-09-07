@@ -31,7 +31,7 @@ def find_columns_multi(df, patterns):
                 break
     return matched
 
-def process_df_chunk(df, filename, user_id, cursor):
+def process_df_chunk(df, filename, user_id, cursor, seen_keys: set):
     col_name = find_column(df, ['company name', 'legal name', 'company', 'entity name'])
     col_trade = find_column(df, ['trade name', 'brand name', 'trade'])
     col_cin = find_column(df, ['cin', 'registration no', 'reg no', 'corporate id'])
@@ -59,6 +59,7 @@ def process_df_chunk(df, filename, user_id, cursor):
     cols_address = find_columns_multi(df, ['address', 'registered address', 'reg address', 'office address', 'location'])
 
     batch = []
+    duplicates_count = 0
     records = df.to_dict('records')
     for row in records:
         gstin = clean_str(row.get(col_gstin)) if col_gstin else ""
@@ -88,6 +89,14 @@ def process_df_chunk(df, filename, user_id, cursor):
             continue
 
         cin = clean_str(row.get(col_cin)) if col_cin else ""
+
+        # Deduplication Filter: Key based on (CIN, GSTIN, Company Name)
+        dedup_key = (cin.strip().upper(), gstin.strip().upper(), c_name.strip().upper())
+        if dedup_key in seen_keys:
+            duplicates_count += 1
+            continue
+        seen_keys.add(dedup_key)
+
         inc_date = clean_str(row.get(col_inc_date)) if col_inc_date else ""
         status = clean_str(row.get(col_status)) if col_status else "Active"
         roc = clean_str(row.get(col_roc)) if col_roc else ""
@@ -181,12 +190,14 @@ def process_df_chunk(df, filename, user_id, cursor):
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', batch)
 
-    return len(batch)
+    return len(batch), duplicates_count
 
 def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int) -> dict:
     filename = os.path.basename(filename)
     total_records = 0
     ingested_records = 0
+    total_duplicates = 0
+    seen_keys = set()
 
     conn = get_db()
     cursor = conn.cursor()
@@ -204,7 +215,9 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
             if df_chunk.empty:
                 continue
             total_records += len(df_chunk)
-            ingested_records += process_df_chunk(df_chunk, filename, user_id, cursor)
+            ingested, dupes = process_df_chunk(df_chunk, filename, user_id, cursor, seen_keys)
+            ingested_records += ingested
+            total_duplicates += dupes
             conn.commit()
     else:
         xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -218,7 +231,9 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
             # Process Excel sheet in 5000 row chunks to limit RAM
             for i in range(0, len(df_full), 5000):
                 df_chunk = df_full.iloc[i:i+5000]
-                ingested_records += process_df_chunk(df_chunk, filename, user_id, cursor)
+                ingested, dupes = process_df_chunk(df_chunk, filename, user_id, cursor, seen_keys)
+                ingested_records += ingested
+                total_duplicates += dupes
                 conn.commit()
 
     conn.close()
@@ -226,5 +241,6 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
     return {
         'filename': filename,
         'total_input_rows': total_records,
-        'ingested_records': ingested_records
+        'ingested_records': ingested_records,
+        'duplicates_removed': total_duplicates
     }
