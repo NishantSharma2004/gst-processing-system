@@ -94,14 +94,20 @@ async def login_user(data: dict):
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
 
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
     user = cursor.fetchone()
     conn.close()
 
-    if not user or not verify_password(password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user:
+        raise HTTPException(status_code=400, detail="No account found with this email. Please register to create an account.")
+
+    if not verify_password(password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect password. Please try again.")
 
     user_dict = dict(user)
     token = generate_token(user_dict["id"], user_dict["email"])

@@ -438,8 +438,12 @@
                 if (!res.ok) {
                     const detail = data.detail || 'Authentication failed';
                     if (detail.toLowerCase().includes('already registered')) {
-                        showAuthAlert('This email is already registered! Switched to Login mode below. Enter your password to sign in.', true);
+                        showAuthAlert('This email is already registered! Auto-switched to Login mode below. Enter your password to sign in.', true);
                         switchAuthTab('login');
+                        document.getElementById('auth-email').value = email;
+                    } else if (detail.toLowerCase().includes('no account found')) {
+                        showAuthAlert('No account found with this email! Auto-switched to Register mode below. Enter details to create your account.', true);
+                        switchAuthTab('register');
                         document.getElementById('auth-email').value = email;
                     } else {
                         showAuthAlert(detail, false);
