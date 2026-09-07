@@ -255,6 +255,12 @@
                 <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
 
+            <!-- In-Modal Alert Notification -->
+            <div id="auth-alert-msg" class="hidden p-3.5 rounded-xl text-xs font-semibold flex items-center space-x-2">
+                <i class="fa-solid fa-circle-info text-base"></i>
+                <span id="auth-alert-text">Alert message goes here</span>
+            </div>
+
             <div class="flex border-b border-slate-200">
                 <button id="auth-tab-login" onclick="switchAuthTab('login')" class="w-1/2 py-2 font-semibold text-sm border-b-2 border-blue-600 text-blue-600">Login</button>
                 <button id="auth-tab-register" onclick="switchAuthTab('register')" class="w-1/2 py-2 font-semibold text-sm border-b-2 border-transparent text-slate-400">Register</button>
@@ -331,6 +337,22 @@
             document.getElementById('master-file').click();
         }
 
+        function showAuthAlert(msg, isWarning = false) {
+            const alertDiv = document.getElementById('auth-alert-msg');
+            const alertText = document.getElementById('auth-alert-text');
+            alertText.innerText = msg;
+            alertDiv.classList.remove('hidden', 'bg-rose-50', 'text-rose-700', 'bg-amber-50', 'text-amber-700', 'border-rose-200', 'border-amber-200');
+            if (isWarning) {
+                alertDiv.classList.add('bg-amber-50', 'text-amber-800', 'border', 'border-amber-200');
+            } else {
+                alertDiv.classList.add('bg-rose-50', 'text-rose-700', 'border', 'border-rose-200');
+            }
+        }
+
+        function clearAuthAlert() {
+            document.getElementById('auth-alert-msg').classList.add('hidden');
+        }
+
         async function checkAuthStatus() {
             if (!authToken) {
                 document.getElementById('btn-login-header').classList.remove('hidden');
@@ -365,16 +387,19 @@
 
         function openAuthModal(mode = 'login') {
             authMode = mode;
+            clearAuthAlert();
             switchAuthTab(mode);
             document.getElementById('auth-modal').classList.remove('hidden');
         }
 
         function closeAuthModal() {
             document.getElementById('auth-modal').classList.add('hidden');
+            clearAuthAlert();
         }
 
         function switchAuthTab(mode) {
             authMode = mode;
+            clearAuthAlert();
             if (mode === 'login') {
                 document.getElementById('auth-modal-title').innerText = 'Sign In to Your Account';
                 document.getElementById('field-fullname').classList.add('hidden');
@@ -392,9 +417,10 @@
 
         async function handleAuthSubmit(e) {
             e.preventDefault();
-            const email = document.getElementById('auth-email').value;
+            clearAuthAlert();
+            const email = document.getElementById('auth-email').value.trim();
             const password = document.getElementById('auth-password').value;
-            const fullName = document.getElementById('auth-fullname').value;
+            const fullName = document.getElementById('auth-fullname').value.trim();
 
             const url = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
             const body = authMode === 'login' ? { email, password } : { email, password, full_name: fullName };
@@ -406,10 +432,19 @@
                     body: JSON.stringify(body)
                 });
                 const data = await res.json();
+                
                 if (!res.ok) {
-                    alert(data.detail || 'Authentication failed');
+                    const detail = data.detail || 'Authentication failed';
+                    if (detail.toLowerCase().includes('already registered')) {
+                        showAuthAlert('This email is already registered! Switched to Login mode below. Enter your password to sign in.', true);
+                        switchAuthTab('login');
+                        document.getElementById('auth-email').value = email;
+                    } else {
+                        showAuthAlert(detail, false);
+                    }
                     return;
                 }
+                
                 authToken = data.access_token;
                 localStorage.setItem('auth_token', authToken);
                 closeAuthModal();
@@ -417,7 +452,7 @@
                 fetchMasterStats();
                 fetchMasterFiles();
             } catch (err) {
-                alert('Auth error: ' + err);
+                showAuthAlert('Auth connection error: ' + err, false);
             }
         }
 
