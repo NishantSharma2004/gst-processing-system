@@ -20,130 +20,133 @@ def find_column(df, patterns):
                 return col
     return None
 
+def process_df_chunk(df, filename, user_id, cursor):
+    col_name = find_column(df, ['company name', 'legal name', 'company', 'entity name'])
+    col_trade = find_column(df, ['trade name', 'brand name', 'trade'])
+    col_cin = find_column(df, ['cin', 'registration no', 'reg no', 'corporate id'])
+    col_gstin = find_column(df, ['gstin', 'gst number', 'gst', 'gstin/uin'])
+    col_inc_date = find_column(df, ['incorporation date', 'inc date', 'date of incorporation', 'reg date'])
+    col_status = find_column(df, ['company status', 'status', 'active status', 'gst status'])
+    col_roc = find_column(df, ['roc', 'roc code', 'registration office'])
+    col_reg_no = find_column(df, ['registration number', 'reg number', 'reg no'])
+    col_category = find_column(df, ['category', 'company category', 'business type'])
+    col_sub_category = find_column(df, ['sub category', 'sub-category'])
+    col_class = find_column(df, ['class', 'class of company', 'type'])
+    col_auth_cap = find_column(df, ['authorized capital', 'auth capital', 'authorized cap'])
+    col_paid_cap = find_column(df, ['paid capital', 'paid up capital', 'paidup capital'])
+    col_listing = find_column(df, ['listing status', 'listed'])
+    col_email = find_column(df, ['email', 'email id', 'e-mail'])
+    col_address = find_column(df, ['address', 'registered address', 'reg address'])
+    col_state = find_column(df, ['state', 'state name'])
+    col_district = find_column(df, ['district', 'city'])
+    col_pincode = find_column(df, ['pincode', 'pin code', 'zip', 'postal code'])
+    col_activity = find_column(df, ['activity', 'business activity', 'industry'])
+    col_charges = find_column(df, ['charges', 'mortgages', 'open charges'])
+    col_directors = find_column(df, ['director', 'directors', 'din', 'management'])
+
+    batch = []
+    records = df.to_dict('records')
+    for row in records:
+        gstin = clean_str(row.get(col_gstin)) if col_gstin else ""
+        c_name = clean_str(row.get(col_name)) if col_name else ""
+        trade_name = clean_str(row.get(col_trade)) if col_trade else ""
+
+        if c_name.lower() in ["not available", "n/a", "none", "nan", "not found"]:
+            c_name = ""
+        if trade_name.lower() in ["not available", "n/a", "none", "nan", "not found"]:
+            trade_name = ""
+
+        if not c_name and trade_name:
+            c_name = trade_name
+        elif c_name and trade_name and trade_name.lower() not in c_name.lower():
+            c_name = f"{c_name} ({trade_name})"
+
+        if not c_name and gstin:
+            c_name = f"GST Record {gstin}"
+
+        if not c_name:
+            for val_raw in row.values():
+                val = clean_str(val_raw)
+                if len(val) > 3 and not val.isdigit() and val.lower() not in ["not available", "n/a", "none", "nan"]:
+                    c_name = val
+                    break
+        if not c_name:
+            continue
+
+        cin = clean_str(row.get(col_cin)) if col_cin else ""
+        inc_date = clean_str(row.get(col_inc_date)) if col_inc_date else ""
+        status = clean_str(row.get(col_status)) if col_status else "Active"
+        roc = clean_str(row.get(col_roc)) if col_roc else ""
+        reg_no = clean_str(row.get(col_reg_no)) if col_reg_no else ""
+        category = clean_str(row.get(col_category)) if col_category else ""
+        sub_category = clean_str(row.get(col_sub_category)) if col_sub_category else ""
+        class_type = clean_str(row.get(col_class)) if col_class else ""
+        auth_cap = clean_str(row.get(col_auth_cap)) if col_auth_cap else ""
+        paid_cap = clean_str(row.get(col_paid_cap)) if col_paid_cap else ""
+        listing = clean_str(row.get(col_listing)) if col_listing else ""
+        email = clean_str(row.get(col_email)) if col_email else ""
+        address = clean_str(row.get(col_address)) if col_address else ""
+        state = clean_str(row.get(col_state)) if col_state else ""
+        district = clean_str(row.get(col_district)) if col_district else ""
+        pincode = clean_str(row.get(col_pincode)) if col_pincode else ""
+        activity = clean_str(row.get(col_activity)) if col_activity else ""
+        charges = clean_str(row.get(col_charges)) if col_charges else ""
+        directors = clean_str(row.get(col_directors)) if col_directors else ""
+
+        batch.append((
+            user_id, filename, cin, c_name, gstin, inc_date, status, roc, reg_no,
+            category, sub_category, class_type, auth_cap, paid_cap, listing,
+            email, address, state, district, pincode, activity, charges, directors
+        ))
+
+    if batch:
+        cursor.executemany('''
+            INSERT INTO company_master_records (
+                user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
+                roc, registration_no, category, sub_category, class_type,
+                authorized_capital, paid_capital, listing_status, email, address,
+                state, district, pincode, activity, charges, directors
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', batch)
+
+    return len(batch)
+
 def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int) -> dict:
     filename = os.path.basename(filename)
-    if filename.endswith('.csv'):
-        df = pd.read_csv(io.BytesIO(file_bytes), low_memory=False, on_bad_lines='skip')
-        sheets = {'Sheet1': df}
-    else:
-        xls = pd.ExcelFile(io.BytesIO(file_bytes))
-        sheets = {s: pd.read_excel(xls, sheet_name=s) for s in xls.sheet_names}
-
     total_records = 0
     ingested_records = 0
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('PRAGMA synchronous = NORMAL')
-    cursor.execute('PRAGMA journal_mode = WAL')
 
-    for sheet_name, df in sheets.items():
-        if df.empty or sheet_name.lower() in ['summary', 'errors', 'metrics', 'stats']:
-            continue
-            
-        total_records += len(df)
+    try:
+        cursor.execute('PRAGMA synchronous = NORMAL')
+        cursor.execute('PRAGMA journal_mode = WAL')
+    except Exception:
+        pass
 
-        col_name = find_column(df, ['company name', 'legal name', 'company', 'entity name'])
-        col_trade = find_column(df, ['trade name', 'brand name', 'trade'])
-        col_cin = find_column(df, ['cin', 'registration no', 'reg no', 'corporate id'])
-        col_gstin = find_column(df, ['gstin', 'gst number', 'gst', 'gstin/uin'])
-        col_inc_date = find_column(df, ['incorporation date', 'inc date', 'date of incorporation', 'reg date'])
-        col_status = find_column(df, ['company status', 'status', 'active status', 'gst status'])
-        col_roc = find_column(df, ['roc', 'roc code', 'registration office'])
-        col_reg_no = find_column(df, ['registration number', 'reg number', 'reg no'])
-        col_category = find_column(df, ['category', 'company category', 'business type'])
-        col_sub_category = find_column(df, ['sub category', 'sub-category'])
-        col_class = find_column(df, ['class', 'class of company', 'type'])
-        col_auth_cap = find_column(df, ['authorized capital', 'auth capital', 'authorized cap'])
-        col_paid_cap = find_column(df, ['paid capital', 'paid up capital', 'paidup capital'])
-        col_listing = find_column(df, ['listing status', 'listed'])
-        col_email = find_column(df, ['email', 'email id', 'e-mail'])
-        col_address = find_column(df, ['address', 'registered address', 'reg address'])
-        col_state = find_column(df, ['state', 'state name'])
-        col_district = find_column(df, ['district', 'city'])
-        col_pincode = find_column(df, ['pincode', 'pin code', 'zip', 'postal code'])
-        col_activity = find_column(df, ['activity', 'business activity', 'industry'])
-        col_charges = find_column(df, ['charges', 'mortgages', 'open charges'])
-        col_directors = find_column(df, ['director', 'directors', 'din', 'management'])
-
-        batch = []
-        for idx, row in df.iterrows():
-            gstin = clean_str(row[col_gstin]).upper() if col_gstin else ""
-            c_name = clean_str(row[col_name]) if col_name else ""
-            trade_name = clean_str(row[col_trade]) if col_trade else ""
-
-            if c_name.lower() in ["not available", "n/a", "none", "nan", "not found"]:
-                c_name = ""
-            if trade_name.lower() in ["not available", "n/a", "none", "nan", "not found"]:
-                trade_name = ""
-
-            if not c_name and trade_name:
-                c_name = trade_name
-            elif c_name and trade_name and trade_name.lower() not in c_name.lower():
-                c_name = f"{c_name} ({trade_name})"
-
-            if not c_name and gstin:
-                c_name = f"GST Record {gstin}"
-
-            if not c_name:
-                for cell in row:
-                    val = clean_str(cell)
-                    if len(val) > 3 and not val.isdigit() and val.lower() not in ["not available", "n/a", "none", "nan"]:
-                        c_name = val
-                        break
-            if not c_name:
+    if filename.endswith('.csv'):
+        chunk_iter = pd.read_csv(io.BytesIO(file_bytes), chunksize=5000, low_memory=False, on_bad_lines='skip')
+        for df_chunk in chunk_iter:
+            if df_chunk.empty:
                 continue
-
-            cin = clean_str(row[col_cin]) if col_cin else ""
-            inc_date = clean_str(row[col_inc_date]) if col_inc_date else ""
-            status = clean_str(row[col_status]) if col_status else "Active"
-            roc = clean_str(row[col_roc]) if col_roc else ""
-            reg_no = clean_str(row[col_reg_no]) if col_reg_no else ""
-            category = clean_str(row[col_category]) if col_category else ""
-            sub_category = clean_str(row[col_sub_category]) if col_sub_category else ""
-            class_type = clean_str(row[col_class]) if col_class else ""
-            auth_cap = clean_str(row[col_auth_cap]) if col_auth_cap else ""
-            paid_cap = clean_str(row[col_paid_cap]) if col_paid_cap else ""
-            listing = clean_str(row[col_listing]) if col_listing else ""
-            email = clean_str(row[col_email]) if col_email else ""
-            address = clean_str(row[col_address]) if col_address else ""
-            state = clean_str(row[col_state]) if col_state else ""
-            district = clean_str(row[col_district]) if col_district else ""
-            pincode = clean_str(row[col_pincode]) if col_pincode else ""
-            activity = clean_str(row[col_activity]) if col_activity else ""
-            charges = clean_str(row[col_charges]) if col_charges else ""
-            directors = clean_str(row[col_directors]) if col_directors else ""
-
-            batch.append((
-                user_id, filename, cin, c_name, gstin, inc_date, status, roc, reg_no,
-                category, sub_category, class_type, auth_cap, paid_cap, listing,
-                email, address, state, district, pincode, activity, charges, directors
-            ))
-
-            if len(batch) >= 5000:
-                cursor.executemany('''
-                    INSERT INTO company_master_records (
-                        user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
-                        roc, registration_no, category, sub_category, class_type,
-                        authorized_capital, paid_capital, listing_status, email, address,
-                        state, district, pincode, activity, charges, directors
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', batch)
-                conn.commit()
-                ingested_records += len(batch)
-                batch = []
-
-        if batch:
-            cursor.executemany('''
-                INSERT INTO company_master_records (
-                    user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
-                    roc, registration_no, category, sub_category, class_type,
-                    authorized_capital, paid_capital, listing_status, email, address,
-                    state, district, pincode, activity, charges, directors
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', batch)
+            total_records += len(df_chunk)
+            ingested_records += process_df_chunk(df_chunk, filename, user_id, cursor)
             conn.commit()
-            ingested_records += len(batch)
+    else:
+        xls = pd.ExcelFile(io.BytesIO(file_bytes))
+        for sheet_name in xls.sheet_names:
+            if sheet_name.lower() in ['summary', 'errors', 'metrics', 'stats']:
+                continue
+            df_full = pd.read_excel(xls, sheet_name=sheet_name)
+            if df_full.empty:
+                continue
+            total_records += len(df_full)
+            # Process Excel sheet in 5000 row chunks to limit RAM
+            for i in range(0, len(df_full), 5000):
+                df_chunk = df_full.iloc[i:i+5000]
+                ingested_records += process_df_chunk(df_chunk, filename, user_id, cursor)
+                conn.commit()
 
     conn.close()
 
