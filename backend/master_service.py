@@ -100,14 +100,37 @@ def process_df_chunk(df, filename, user_id, cursor):
         ))
 
     if batch:
-        cursor.executemany('''
-            INSERT INTO company_master_records (
-                user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
-                roc, registration_no, category, sub_category, class_type,
-                authorized_capital, paid_capital, listing_status, email, address,
-                state, district, pincode, activity, charges, directors
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', batch)
+        is_pg = getattr(cursor, 'is_postgres', False)
+        if is_pg:
+            try:
+                import psycopg2.extras
+                sql = '''
+                    INSERT INTO company_master_records (
+                        user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
+                        roc, registration_no, category, sub_category, class_type,
+                        authorized_capital, paid_capital, listing_status, email, address,
+                        state, district, pincode, activity, charges, directors
+                    ) VALUES %s
+                '''
+                psycopg2.extras.execute_values(cursor.cursor, sql, batch, page_size=2000)
+            except Exception:
+                cursor.executemany('''
+                    INSERT INTO company_master_records (
+                        user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
+                        roc, registration_no, category, sub_category, class_type,
+                        authorized_capital, paid_capital, listing_status, email, address,
+                        state, district, pincode, activity, charges, directors
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', batch)
+        else:
+            cursor.executemany('''
+                INSERT INTO company_master_records (
+                    user_id, source_file, cin, company_name, gstin, incorporation_date, company_status,
+                    roc, registration_no, category, sub_category, class_type,
+                    authorized_capital, paid_capital, listing_status, email, address,
+                    state, district, pincode, activity, charges, directors
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', batch)
 
     return len(batch)
 

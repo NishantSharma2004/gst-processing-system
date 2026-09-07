@@ -145,19 +145,28 @@
             <div class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center">
                 <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-purple-500 transition-colors cursor-pointer" onclick="triggerMasterUpload()">
                     <i class="fa-solid fa-box-archive text-5xl text-purple-600 mb-4"></i>
-                    <h3 class="text-lg font-semibold text-slate-700">Upload New Master Corporate Dataset</h3>
-                    <p class="text-sm text-slate-400 mt-1">Upload Master .xlsx / .csv containing INCORPORATION DATE, ROC, CAPITAL, EMAIL, ADDRESS, DIRECTORS, etc.</p>
-                    <input type="file" id="master-file" class="hidden" accept=".xlsx, .xls, .csv" onchange="uploadMasterFile(event)">
+                    <h3 class="text-lg font-semibold text-slate-700">Upload Master Corporate Datasets</h3>
+                    <p class="text-sm text-slate-400 mt-1">Upload single or multiple Master .xlsx / .csv files (Supports INCORPORATION DATE, ROC, CAPITAL, EMAIL, ADDRESS, DIRECTORS, etc.)</p>
+                    <input type="file" id="master-file" class="hidden" accept=".xlsx, .xls, .csv" multiple onchange="uploadMasterFile(event)">
                 </div>
 
-                <div id="master-ingest-status" class="hidden mt-6 bg-purple-50 p-6 rounded-xl border border-purple-200 text-left">
+                <div id="master-ingest-status" class="hidden mt-6 bg-purple-50 p-6 rounded-xl border border-purple-200 text-left space-y-3">
                     <div class="flex justify-between items-center">
-                        <h4 class="font-bold text-purple-900 text-base" id="master-filename">master_data.csv</h4>
-                        <span class="bg-purple-200 text-purple-800 text-xs px-3 py-1 rounded-full font-bold">Ingested</span>
+                        <div class="flex items-center space-x-3">
+                            <i id="master-spinner" class="fa-solid fa-spinner fa-spin text-purple-600 text-lg"></i>
+                            <h4 class="font-bold text-purple-900 text-base" id="master-filename">master_data.csv</h4>
+                        </div>
+                        <span id="master-badge" class="bg-purple-200 text-purple-800 text-xs px-3 py-1 rounded-full font-bold flex items-center space-x-1">
+                            <span>Processing...</span>
+                        </span>
                     </div>
-                    <div class="mt-3 grid grid-cols-2 gap-4 text-xs font-semibold text-purple-900">
-                        <div>Total Input Rows: <span id="master-total-input" class="font-bold text-slate-800">0</span></div>
-                        <div>Indexed Corporate Records: <span id="master-ingested-count" class="font-bold text-emerald-600">0</span></div>
+                    <!-- Animated Progress Bar -->
+                    <div class="w-full bg-purple-200 rounded-full h-2.5 overflow-hidden">
+                        <div id="master-progress-bar" class="bg-purple-600 h-2.5 rounded-full transition-all duration-300 w-1/3 animate-pulse"></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 text-xs font-semibold text-purple-900 pt-1">
+                        <div>Total Input Rows: <span id="master-total-input" class="font-bold text-slate-800">Calculating...</span></div>
+                        <div>Indexed Corporate Records: <span id="master-ingested-count" class="font-bold text-emerald-600">Syncing with Supabase...</span></div>
                     </div>
                 </div>
             </div>
@@ -595,49 +604,81 @@
 
         async function uploadMasterFile(event) {
             if (triggerAuthGate()) return;
-            const file = event.target.files[0];
-            if (!file) return;
+            const files = Array.from(event.target.files);
+            if (!files || files.length === 0) return;
 
-            const formData = new FormData();
-            formData.append('file', file);
+            const statusCard = document.getElementById('master-ingest-status');
+            const fileNameElem = document.getElementById('master-filename');
+            const badgeElem = document.getElementById('master-badge');
+            const spinnerElem = document.getElementById('master-spinner');
+            const progressBar = document.getElementById('master-progress-bar');
+            const totalInputElem = document.getElementById('master-total-input');
+            const ingestedCountElem = document.getElementById('master-ingested-count');
 
-            document.getElementById('master-ingest-status').classList.remove('hidden');
-            document.getElementById('master-filename').innerText = file.name + ' (Ingesting...)';
+            statusCard.classList.remove('hidden');
 
-            try {
-                const res = await fetch('/api/master/upload', {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: formData
-                });
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const fileIndexStr = files.length > 1 ? ` (${i + 1}/${files.length})` : '';
 
-                let data;
+                fileNameElem.innerText = file.name + fileIndexStr;
+                badgeElem.className = "bg-purple-200 text-purple-800 text-xs px-3 py-1 rounded-full font-bold flex items-center space-x-1";
+                badgeElem.innerHTML = `<i class="fa-solid fa-cloud-arrow-up text-purple-600"></i><span>Uploading & Indexing...</span>`;
+                spinnerElem.className = "fa-solid fa-spinner fa-spin text-purple-600 text-lg";
+                spinnerElem.classList.remove('hidden');
+                progressBar.className = "bg-purple-600 h-2.5 rounded-full transition-all duration-300 w-2/3 animate-pulse";
+                totalInputElem.innerText = "Processing streaming chunks...";
+                ingestedCountElem.innerText = "Indexing into Supabase...";
+
+                const formData = new FormData();
+                formData.append('file', file);
+
                 try {
-                    data = await res.json();
-                } catch (e) {
-                    alert(`Master Upload Error (${res.status}): Server error during file ingestion. Please verify file format.`);
-                    document.getElementById('master-filename').innerText = file.name + ' (Failed)';
-                    event.target.value = '';
-                    return;
-                }
+                    const res = await fetch('/api/master/upload', {
+                        method: 'POST',
+                        headers: getHeaders(),
+                        body: formData
+                    });
 
-                if (!res.ok) {
-                    alert('Master Upload Error: ' + (data.detail || 'Failed to upload'));
-                    document.getElementById('master-filename').innerText = file.name + ' (Failed)';
-                    event.target.value = '';
-                    return;
-                }
+                    let data;
+                    try {
+                        data = await res.json();
+                    } catch (e) {
+                        alert(`Master Upload Error (${res.status}): Server error during file ingestion.`);
+                        badgeElem.className = "bg-rose-100 text-rose-800 text-xs px-3 py-1 rounded-full font-bold";
+                        badgeElem.innerText = "Failed";
+                        spinnerElem.classList.add('hidden');
+                        continue;
+                    }
 
-                document.getElementById('master-filename').innerText = data.filename;
-                document.getElementById('master-total-input').innerText = data.total_input_rows.toLocaleString();
-                document.getElementById('master-ingested-count').innerText = data.ingested_records.toLocaleString();
-                event.target.value = '';
-                fetchMasterStats();
-                fetchMasterFiles();
-            } catch (err) {
-                alert('Master upload failed: ' + err);
-                event.target.value = '';
+                    if (!res.ok) {
+                        alert('Master Upload Error: ' + (data.detail || 'Failed to upload'));
+                        badgeElem.className = "bg-rose-100 text-rose-800 text-xs px-3 py-1 rounded-full font-bold";
+                        badgeElem.innerText = "Failed";
+                        spinnerElem.classList.add('hidden');
+                        continue;
+                    }
+
+                    fileNameElem.innerText = data.filename;
+                    totalInputElem.innerText = data.total_input_rows.toLocaleString();
+                    ingestedCountElem.innerText = data.ingested_records.toLocaleString();
+
+                    progressBar.className = "bg-emerald-500 h-2.5 rounded-full transition-all duration-300 w-full";
+                    badgeElem.className = "bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold flex items-center space-x-1";
+                    badgeElem.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i><span>Successfully Ingested</span>`;
+                    spinnerElem.className = "fa-solid fa-circle-check text-emerald-600 text-lg";
+
+                    fetchMasterStats();
+                    fetchMasterFiles();
+                } catch (err) {
+                    alert('Master upload failed: ' + err);
+                    badgeElem.className = "bg-rose-100 text-rose-800 text-xs px-3 py-1 rounded-full font-bold";
+                    badgeElem.innerText = "Failed";
+                    spinnerElem.classList.add('hidden');
+                }
             }
+
+            event.target.value = '';
         }
 
         async function handleFileSelect(event) {
