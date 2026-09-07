@@ -424,6 +424,8 @@
                     document.getElementById('user-display-email').innerText = currentUser.email;
                     document.getElementById('btn-login-header').classList.add('hidden');
                     document.getElementById('user-profile-badge').classList.remove('hidden');
+                    fetchMasterStats();
+                    fetchMasterFiles();
                 } else {
                     logoutUser();
                 }
