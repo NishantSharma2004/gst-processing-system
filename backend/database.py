@@ -77,9 +77,18 @@ class UnifiedConnection:
 
 def get_db():
     if IS_POSTGRES:
-        import psycopg2
-        raw_conn = psycopg2.connect(DATABASE_URL)
-        return UnifiedConnection(raw_conn, is_postgres=True)
+        try:
+            import psycopg2
+            raw_conn = psycopg2.connect(DATABASE_URL)
+            return UnifiedConnection(raw_conn, is_postgres=True)
+        except Exception as e:
+            print(f"[DATABASE WARNING] PostgreSQL connection error: {e}. Falling back to SQLite.", flush=True)
+            db_dir = os.path.dirname(DB_PATH)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
+            raw_conn = sqlite3.connect(DB_PATH)
+            raw_conn.row_factory = sqlite3.Row
+            return UnifiedConnection(raw_conn, is_postgres=False)
     else:
         db_dir = os.path.dirname(DB_PATH)
         if db_dir and not os.path.exists(db_dir):
