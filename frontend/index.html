@@ -287,6 +287,52 @@
     </div>
 
     <script>
+        // ClickStack OpenTelemetry (OTLP) Collector Singleton
+        class ClickStackTelemetryCollector {
+            constructor(serviceName = 'gst-corporate-frontend') {
+                this.serviceName = serviceName;
+                this.initListeners();
+            }
+
+            initListeners() {
+                window.addEventListener('error', (event) => {
+                    this.recordEvent('ERROR', `Unhandled Error: ${event.message || 'Window Error'} at ${event.filename}:${event.lineno}`);
+                });
+
+                window.addEventListener('unhandledrejection', (event) => {
+                    this.recordEvent('ERROR', `Unhandled Promise Rejection: ${event.reason?.message || event.reason}`);
+                });
+            }
+
+            recordEvent(severity, message) {
+                const otlpPayload = {
+                    resourceLogs: [{
+                        resource: {
+                            attributes: [
+                                { key: "service.name", value: { stringValue: this.serviceName } },
+                                { key: "deployment.environment", value: { stringValue: "production" } }
+                            ]
+                        },
+                        scopeLogs: [{
+                            logRecords: [{
+                                timeUnixNano: Date.now() * 1000000,
+                                severityText: severity,
+                                body: { stringValue: `[TELEMETRY_${severity}] ${message}` }
+                            }]
+                        }]
+                    }]
+                };
+
+                fetch('/v1/logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(otlpPayload)
+                }).catch(() => {});
+            }
+        }
+
+        const clickstackTelemetry = new ClickStackTelemetryCollector();
+
         let authToken = localStorage.getItem('auth_token') || null;
         let currentUser = null;
         let currentJobId = localStorage.getItem('currentJobId') || null;

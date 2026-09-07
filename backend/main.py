@@ -40,6 +40,27 @@ def get_clickstack_metrics():
 def get_clickstack_logs():
     return {"logs": list(telemetry.recent_logs)}
 
+@app.post("/v1/logs")
+async def receive_otlp_logs(request: Request):
+    try:
+        payload = await request.json()
+        resource_logs = payload.get("resourceLogs", [])
+        ingested_count = 0
+
+        for r_log in resource_logs:
+            scope_logs = r_log.get("scopeLogs", [])
+            for s_log in scope_logs:
+                for record in s_log.get("logRecords", []):
+                    body = record.get("body", {}).get("stringValue", "")
+                    severity = record.get("severityText", "INFO")
+                    trace_id = str(uuid.uuid4())[:8]
+                    telemetry.record_request("OTLP", "/v1/logs", 200, 0.1, trace_id)
+                    ingested_count += 1
+
+        return {"status": "success", "ingested": ingested_count}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
