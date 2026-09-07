@@ -565,10 +565,12 @@
                 document.getElementById('master-filename').innerText = data.filename;
                 document.getElementById('master-total-input').innerText = data.total_input_rows.toLocaleString();
                 document.getElementById('master-ingested-count').innerText = data.ingested_records.toLocaleString();
+                event.target.value = '';
                 fetchMasterStats();
                 fetchMasterFiles();
             } catch (err) {
                 alert('Master upload failed: ' + err);
+                event.target.value = '';
             }
         }
 
@@ -577,6 +579,7 @@
             selectedFile = event.target.files[0];
             if (!selectedFile) return;
             uploadFile();
+            event.target.value = '';
         }
 
         async function uploadFile() {

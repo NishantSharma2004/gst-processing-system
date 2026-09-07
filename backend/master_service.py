@@ -1,6 +1,7 @@
 import pandas as pd
 import io
 import re
+import os
 import sqlite3
 from datetime import datetime
 from .database import get_db
@@ -20,6 +21,7 @@ def find_column(df, patterns):
     return None
 
 def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int) -> dict:
+    filename = os.path.basename(filename)
     if filename.endswith('.csv'):
         df = pd.read_csv(io.BytesIO(file_bytes), low_memory=False)
         sheets = {'Sheet1': df}

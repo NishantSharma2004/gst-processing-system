@@ -239,8 +239,9 @@ async def upload_master(request: Request, file: UploadFile = File(...)):
     if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
         raise HTTPException(status_code=400, detail="Invalid file type. Upload .xlsx, .xls, or .csv")
 
+    clean_filename = os.path.basename(file.filename)
     contents = await file.read()
-    res = parse_and_ingest_master_file(contents, file.filename, user_id)
+    res = parse_and_ingest_master_file(contents, clean_filename, user_id)
 
     return {
         "message": "Master corporate data uploaded and indexed successfully",
@@ -256,10 +257,14 @@ def get_master_files(request: Request):
 
     conn = get_db()
     cursor = conn.cursor()
+    # Backfill any legacy records with null/empty source_file
+    cursor.execute("UPDATE company_master_records SET source_file = 'Master_Dataset_1.csv' WHERE source_file IS NULL OR source_file = ''")
+    conn.commit()
+
     cursor.execute('''
-        SELECT source_file as filename, COUNT(*) as total_records, MIN(created_at) as created_at
+        SELECT source_file as filename, COUNT(*) as total_records, MAX(created_at) as created_at
         FROM company_master_records
-        WHERE (user_id = ? OR user_id = 1) AND source_file IS NOT NULL AND source_file != ''
+        WHERE (user_id = ? OR user_id = 1)
         GROUP BY source_file
         ORDER BY created_at DESC
     ''', (user_id,))
@@ -272,19 +277,20 @@ def get_master_files(request: Request):
 def delete_master_file(filename: str, request: Request):
     user = get_current_user_from_req(request)
     user_id = user["user_id"]
+    clean_filename = os.path.basename(filename)
 
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM company_master_records
         WHERE (user_id = ? OR user_id = 1) AND source_file = ?
-    ''', (user_id, filename))
+    ''', (user_id, clean_filename))
     deleted_count = cursor.rowcount
     conn.commit()
     conn.close()
 
     return {
-        "message": f"Dataset '{filename}' deleted successfully",
+        "message": f"Dataset '{clean_filename}' deleted successfully",
         "deleted_records": deleted_count
     }
 
