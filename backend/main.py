@@ -7,6 +7,7 @@ import os
 import io
 import asyncio
 from datetime import datetime
+import time
 import sqlite3
 from typing import Optional
 
@@ -15,9 +16,11 @@ from .excel_service import parse_and_clean_excel, generate_3sheet_excel
 from .job_runner import run_processing_job, pause_flags
 from .auth import hash_password, verify_password, generate_token, verify_token
 from .master_service import parse_and_ingest_master_file
+from .observability import ClickStackObservabilityMiddleware, telemetry
 
 app = FastAPI(title="GST & Master Corporate Data System")
 
+app.add_middleware(ClickStackObservabilityMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,6 +31,14 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     init_db()
+
+@app.get("/api/observability/metrics")
+def get_clickstack_metrics():
+    return telemetry.get_metrics()
+
+@app.get("/api/observability/logs")
+def get_clickstack_logs():
+    return {"logs": list(telemetry.recent_logs)}
 
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=frontend_path), name="static")
@@ -247,14 +258,18 @@ async def upload_master(request: Request, file: UploadFile = File(...)):
 
     clean_filename = os.path.basename(file.filename)
     try:
+        t0 = time.time()
         contents = await file.read()
         res = parse_and_ingest_master_file(contents, clean_filename, user_id)
+        duration_sec = time.time() - t0
+        telemetry.record_ingestion(clean_filename, res["ingested_records"], duration_sec)
 
         return {
             "message": "Master corporate data uploaded and indexed successfully",
             "filename": res["filename"],
             "total_input_rows": res["total_input_rows"],
-            "ingested_records": res["ingested_records"]
+            "ingested_records": res["ingested_records"],
+            "ingestion_speed": f"{round(res['ingested_records'] / duration_sec, 1)} rows/sec" if duration_sec > 0 else "N/A"
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to ingest master file: {str(e)}")
