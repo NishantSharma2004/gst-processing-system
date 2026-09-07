@@ -321,10 +321,12 @@ def search_deep_company(request: Request, q: str = Query(..., min_length=2)):
     cursor.execute('''
         SELECT * FROM company_master_records 
         WHERE (user_id = ? OR user_id = 1) AND (
-            UPPER(company_name) LIKE ? OR UPPER(gstin) LIKE ? OR UPPER(cin) LIKE ? OR UPPER(directors) LIKE ? OR UPPER(pincode) LIKE ?
+            UPPER(company_name) LIKE ? OR UPPER(gstin) LIKE ? OR UPPER(cin) LIKE ? 
+            OR UPPER(directors) LIKE ? OR UPPER(pincode) LIKE ? OR UPPER(registration_no) LIKE ?
+            OR UPPER(email) LIKE ? OR UPPER(state) LIKE ? OR UPPER(district) LIKE ? OR UPPER(address) LIKE ?
         )
         LIMIT 50
-    ''', (user_id, pattern, pattern, pattern, pattern, pattern))
+    ''', (user_id, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern))
     master_rows = [dict(r) for r in cursor.fetchall()]
 
     cursor.execute('''

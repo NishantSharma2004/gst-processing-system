@@ -298,6 +298,8 @@
             checkAuthStatus();
             fetchMasterStats();
             fetchMasterFiles();
+            const savedTab = localStorage.getItem('activeTab') || 'batch';
+            switchTab(savedTab);
             if (currentJobId) {
                 restoreJob(currentJobId);
             }
@@ -457,6 +459,7 @@
         }
 
         function switchTab(tab) {
+            localStorage.setItem('activeTab', tab);
             document.getElementById('tab-batch').classList.add('hidden');
             document.getElementById('tab-master').classList.add('hidden');
             document.getElementById('tab-search').classList.add('hidden');
