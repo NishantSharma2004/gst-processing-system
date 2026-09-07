@@ -23,7 +23,7 @@ def find_column(df, patterns):
 def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int) -> dict:
     filename = os.path.basename(filename)
     if filename.endswith('.csv'):
-        df = pd.read_csv(io.BytesIO(file_bytes), low_memory=False)
+        df = pd.read_csv(io.BytesIO(file_bytes), low_memory=False, on_bad_lines='skip')
         sheets = {'Sheet1': df}
     else:
         xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -34,6 +34,8 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
 
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute('PRAGMA synchronous = NORMAL')
+    cursor.execute('PRAGMA journal_mode = WAL')
 
     for sheet_name, df in sheets.items():
         if df.empty:

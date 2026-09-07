@@ -240,15 +240,18 @@ async def upload_master(request: Request, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Invalid file type. Upload .xlsx, .xls, or .csv")
 
     clean_filename = os.path.basename(file.filename)
-    contents = await file.read()
-    res = parse_and_ingest_master_file(contents, clean_filename, user_id)
+    try:
+        contents = await file.read()
+        res = parse_and_ingest_master_file(contents, clean_filename, user_id)
 
-    return {
-        "message": "Master corporate data uploaded and indexed successfully",
-        "filename": res["filename"],
-        "total_input_rows": res["total_input_rows"],
-        "ingested_records": res["ingested_records"]
-    }
+        return {
+            "message": "Master corporate data uploaded and indexed successfully",
+            "filename": res["filename"],
+            "total_input_rows": res["total_input_rows"],
+            "ingested_records": res["ingested_records"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to ingest master file: {str(e)}")
 
 @app.get("/api/master/files")
 def get_master_files(request: Request):

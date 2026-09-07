@@ -557,11 +557,24 @@
                     headers: getHeaders(),
                     body: formData
                 });
-                const data = await res.json();
-                if (!res.ok) {
-                    alert('Master Upload Error: ' + (data.detail || 'Failed to upload'));
+
+                let data;
+                try {
+                    data = await res.json();
+                } catch (e) {
+                    alert(`Master Upload Error (${res.status}): Server error during file ingestion. Please verify file format.`);
+                    document.getElementById('master-filename').innerText = file.name + ' (Failed)';
+                    event.target.value = '';
                     return;
                 }
+
+                if (!res.ok) {
+                    alert('Master Upload Error: ' + (data.detail || 'Failed to upload'));
+                    document.getElementById('master-filename').innerText = file.name + ' (Failed)';
+                    event.target.value = '';
+                    return;
+                }
+
                 document.getElementById('master-filename').innerText = data.filename;
                 document.getElementById('master-total-input').innerText = data.total_input_rows.toLocaleString();
                 document.getElementById('master-ingested-count').innerText = data.ingested_records.toLocaleString();
