@@ -38,19 +38,20 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
     cursor.execute('PRAGMA journal_mode = WAL')
 
     for sheet_name, df in sheets.items():
-        if df.empty:
+        if df.empty or sheet_name.lower() in ['summary', 'errors', 'metrics', 'stats']:
             continue
             
         total_records += len(df)
 
-        col_name = find_column(df, ['company name', 'legal name', 'company', 'name', 'entity name'])
+        col_name = find_column(df, ['company name', 'legal name', 'company', 'entity name'])
+        col_trade = find_column(df, ['trade name', 'brand name', 'trade'])
         col_cin = find_column(df, ['cin', 'registration no', 'reg no', 'corporate id'])
         col_gstin = find_column(df, ['gstin', 'gst number', 'gst', 'gstin/uin'])
         col_inc_date = find_column(df, ['incorporation date', 'inc date', 'date of incorporation', 'reg date'])
-        col_status = find_column(df, ['company status', 'status', 'active status'])
+        col_status = find_column(df, ['company status', 'status', 'active status', 'gst status'])
         col_roc = find_column(df, ['roc', 'roc code', 'registration office'])
         col_reg_no = find_column(df, ['registration number', 'reg number', 'reg no'])
-        col_category = find_column(df, ['category', 'company category'])
+        col_category = find_column(df, ['category', 'company category', 'business type'])
         col_sub_category = find_column(df, ['sub category', 'sub-category'])
         col_class = find_column(df, ['class', 'class of company', 'type'])
         col_auth_cap = find_column(df, ['authorized capital', 'auth capital', 'authorized cap'])
@@ -67,18 +68,33 @@ def parse_and_ingest_master_file(file_bytes: bytes, filename: str, user_id: int)
 
         batch = []
         for idx, row in df.iterrows():
+            gstin = clean_str(row[col_gstin]).upper() if col_gstin else ""
             c_name = clean_str(row[col_name]) if col_name else ""
+            trade_name = clean_str(row[col_trade]) if col_trade else ""
+
+            if c_name.lower() in ["not available", "n/a", "none", "nan", "not found"]:
+                c_name = ""
+            if trade_name.lower() in ["not available", "n/a", "none", "nan", "not found"]:
+                trade_name = ""
+
+            if not c_name and trade_name:
+                c_name = trade_name
+            elif c_name and trade_name and trade_name.lower() not in c_name.lower():
+                c_name = f"{c_name} ({trade_name})"
+
+            if not c_name and gstin:
+                c_name = f"GST Record {gstin}"
+
             if not c_name:
                 for cell in row:
                     val = clean_str(cell)
-                    if len(val) > 3 and not val.isdigit():
+                    if len(val) > 3 and not val.isdigit() and val.lower() not in ["not available", "n/a", "none", "nan"]:
                         c_name = val
                         break
             if not c_name:
                 continue
 
             cin = clean_str(row[col_cin]) if col_cin else ""
-            gstin = clean_str(row[col_gstin]).upper() if col_gstin else ""
             inc_date = clean_str(row[col_inc_date]) if col_inc_date else ""
             status = clean_str(row[col_status]) if col_status else "Active"
             roc = clean_str(row[col_roc]) if col_roc else ""
