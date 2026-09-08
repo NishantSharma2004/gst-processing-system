@@ -252,7 +252,7 @@ def get_cached_gst(gstin: str, user_id: int = 1, ttl_days: int = 7):
     cutoff = datetime.now() - timedelta(days=ttl_days)
     cursor.execute('''
         SELECT * FROM gst_records 
-        WHERE (user_id = ? OR user_id = 1) AND gstin = ? AND last_checked_at >= ?
+        WHERE user_id = ? AND gstin = ? AND last_checked_at >= ?
     ''', (user_id, gstin, cutoff.strftime("%Y-%m-%d %H:%M:%S")))
     row = cursor.fetchone()
     conn.close()

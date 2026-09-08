@@ -310,7 +310,7 @@ def get_master_files(request: Request):
     cursor.execute('''
         SELECT source_file as filename, COUNT(*) as total_records, MAX(created_at) as created_at
         FROM company_master_records
-        WHERE (user_id = ? OR user_id = 1)
+        WHERE user_id = ?
         GROUP BY source_file
         ORDER BY created_at DESC
     ''', (user_id,))
@@ -329,8 +329,8 @@ def delete_master_file(filename: str, request: Request):
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM company_master_records
-        WHERE (user_id = ? OR user_id = 1 OR ? = 1) AND source_file = ?
-    ''', (user_id, user_id, clean_filename))
+        WHERE user_id = ? AND source_file = ?
+    ''', (user_id, clean_filename))
     deleted_count = cursor.rowcount
     conn.commit()
     conn.close()
@@ -346,7 +346,7 @@ def master_stats(request: Request):
     user_id = user["user_id"]
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) as cnt FROM company_master_records WHERE user_id = ? OR user_id = 1", (user_id,))
+    cursor.execute("SELECT COUNT(*) as cnt FROM company_master_records WHERE user_id = ?", (user_id,))
     cnt = cursor.fetchone()["cnt"]
     conn.close()
     return {"total_master_records": cnt}
@@ -363,7 +363,7 @@ def search_deep_company(request: Request, q: str = Query(..., min_length=2)):
 
     cursor.execute('''
         SELECT * FROM company_master_records 
-        WHERE (user_id = ? OR user_id = 1) AND (
+        WHERE user_id = ? AND (
             UPPER(company_name) LIKE ? OR UPPER(gstin) LIKE ? OR UPPER(cin) LIKE ? 
             OR UPPER(directors) LIKE ? OR UPPER(pincode) LIKE ? OR UPPER(registration_no) LIKE ?
             OR UPPER(email) LIKE ? OR UPPER(state) LIKE ? OR UPPER(district) LIKE ? OR UPPER(address) LIKE ?
@@ -375,7 +375,7 @@ def search_deep_company(request: Request, q: str = Query(..., min_length=2)):
     cursor.execute('''
         SELECT gstin, legal_name, trade_name, gst_status, business_type, last_checked_at 
         FROM gst_records 
-        WHERE (user_id = ? OR user_id = 1) AND (
+        WHERE user_id = ? AND (
             UPPER(legal_name) LIKE ? OR UPPER(trade_name) LIKE ? OR UPPER(gstin) LIKE ?
         )
         LIMIT 50
